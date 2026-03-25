@@ -129,7 +129,15 @@ def get_bq_client():
         if local_key.exists():
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(local_key)
 
-    return bigquery.Client(project=BQ_PROJECT)
+    client = bigquery.Client(project=BQ_PROJECT)
+
+    # Ensure dataset exists (auto-create on first run)
+    dataset_ref = bigquery.DatasetReference(BQ_PROJECT, BQ_DATASET)
+    dataset = bigquery.Dataset(dataset_ref)
+    dataset.location = "US"
+    client.create_dataset(dataset, exists_ok=True)
+
+    return client
 
 
 # =====================================================================
