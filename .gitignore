@@ -1,0 +1,23 @@
+# Data files (fetched at runtime, not committed)
+data/
+*.csv
+*.parquet
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# GCP credentials
+*sa-key*.json
+*.credentials.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/

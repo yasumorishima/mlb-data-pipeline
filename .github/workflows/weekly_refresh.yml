@@ -1,0 +1,119 @@
+name: Weekly Data Refresh
+
+on:
+  schedule:
+    # Every Monday UTC 01:00 (JST 10:00) — before baseball-mlops retrain (UTC 02:00)
+    - cron: "0 1 * * 1"
+  workflow_dispatch:
+    inputs:
+      memo:
+        description: "Execution intent (required for manual runs)"
+        required: true
+        type: string
+      steps:
+        description: "Comma-separated steps to run (default: all)"
+        required: false
+        type: string
+        default: "all"
+      start_year:
+        description: "Start year override"
+        required: false
+        type: string
+        default: "2015"
+      end_year:
+        description: "End year override"
+        required: false
+        type: string
+        default: "2025"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Setup GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          printf '%s' "$GCP_SA_KEY" > /tmp/gcp-sa-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa-key.json" >> $GITHUB_ENV
+
+      - name: Determine steps
+        id: steps
+        run: |
+          STEPS="${{ inputs.steps || 'all' }}"
+          echo "steps=$STEPS" >> $GITHUB_OUTPUT
+          echo "Running steps: $STEPS"
+
+      # ================================================================
+      # FanGraphs (batting + pitching + pitcher plus)
+      # ================================================================
+      - name: Fetch FanGraphs
+        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'fangraphs')
+        working-directory: scripts
+        run: |
+          python fetch_fangraphs.py \
+            --start-year ${{ inputs.start_year || '2015' }} \
+            --end-year ${{ inputs.end_year || '2025' }}
+
+      # ================================================================
+      # Savant leaderboards (exit velo, expected, bat tracking, etc.)
+      # ================================================================
+      - name: Fetch Savant leaderboards
+        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'savant')
+        working-directory: scripts
+        run: |
+          python fetch_savant_leaderboards.py \
+            --start-year ${{ inputs.start_year || '2015' }} \
+            --end-year ${{ inputs.end_year || '2025' }}
+
+      # ================================================================
+      # Fielding + running (sprint speed, OAA, catcher)
+      # ================================================================
+      - name: Fetch fielding/running
+        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'fielding')
+        working-directory: scripts
+        run: |
+          python fetch_fielding_running.py \
+            --start-year ${{ inputs.start_year || '2015' }} \
+            --end-year ${{ inputs.end_year || '2025' }}
+
+      # ================================================================
+      # Park factors
+      # ================================================================
+      - name: Fetch park factors
+        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'park')
+        working-directory: scripts
+        run: |
+          python fetch_park_factors.py \
+            --start-year ${{ inputs.start_year || '2015' }} \
+            --end-year ${{ inputs.end_year || '2025' }}
+
+      # ================================================================
+      # Discord notification
+      # ================================================================
+      - name: Notify Discord
+        if: always() && env.DISCORD_WEBHOOK_URL != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          STATUS="${{ job.status }}"
+          if [ "$STATUS" = "success" ]; then
+            EMOJI="✅"
+          else
+            EMOJI="❌"
+          fi
+
+          curl -s -H "Content-Type: application/json" \
+            -d "{\"content\": \"${EMOJI} **mlb-data-pipeline** weekly refresh: ${STATUS}\"}" \
+            "$DISCORD_WEBHOOK_URL"
