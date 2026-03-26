@@ -100,6 +100,14 @@ jobs:
             --end-year ${{ inputs.end_year || '2025' }}
 
       # ================================================================
+      # Statcast pitches migration (one-time: mlb_wp -> mlb_shared)
+      # ================================================================
+      - name: Migrate statcast_pitches
+        if: contains(steps.outputs.steps, 'statcast_migrate')
+        working-directory: scripts
+        run: python migrate_statcast_pitches.py
+
+      # ================================================================
       # Discord notification
       # ================================================================
       - name: Notify Discord
