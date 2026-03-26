@@ -46,6 +46,17 @@ from config import (
 
 pb.cache.enable()
 
+# Budget: Savant leaderboards is one step within the 180-min job
+BUDGET_MIN = 60
+
+
+def _log_elapsed(label: str, start: float, budget_min: int = BUDGET_MIN):
+    elapsed_min = (time.time() - start) / 60
+    print(f"  [{label}] elapsed: {elapsed_min:.1f} min / {budget_min} min budget")
+    if elapsed_min > budget_min * 0.8:
+        print(f"  ⚠️ WARNING: {label} used {elapsed_min:.0f}/{budget_min} min "
+              f"({elapsed_min / budget_min * 100:.0f}%) — timeout risk!")
+
 
 def _yearly_fetch(name, func, start, end, csv_name, **kwargs) -> pd.DataFrame:
     """Generic yearly fetch loop with retry."""
@@ -235,14 +246,22 @@ def main():
     parser.add_argument("--no-bq", action="store_true")
     args = parser.parse_args()
 
+    t0 = time.time()
     results = {}
     results["sc_batter_exitvelo"] = fetch_batter_exitvelo(args.start_year, args.end_year)
+    _log_elapsed("batter_exitvelo", t0)
     results["sc_batter_expected"] = fetch_batter_expected(args.start_year, args.end_year)
+    _log_elapsed("batter_expected", t0)
     results["sc_pitcher_exitvelo"] = fetch_pitcher_exitvelo(args.start_year, args.end_year)
+    _log_elapsed("pitcher_exitvelo", t0)
     results["sc_pitcher_expected"] = fetch_pitcher_expected(args.start_year, args.end_year)
+    _log_elapsed("pitcher_expected", t0)
     results["sc_pitcher_arsenal"] = fetch_pitcher_arsenal(args.start_year, args.end_year)
+    _log_elapsed("pitcher_arsenal", t0)
     results["sc_bat_tracking"] = fetch_bat_tracking(2024, args.end_year)
+    _log_elapsed("bat_tracking", t0)
     results["sc_batted_ball"] = fetch_batted_ball(args.start_year, args.end_year)
+    _log_elapsed("batted_ball", t0)
 
     # Validate all fetched data
     yr = (args.start_year, args.end_year)
@@ -260,6 +279,7 @@ def main():
             except Exception:
                 pass
 
+    _log_elapsed("Savant leaderboards total", t0)
     print("\nSavant leaderboards fetch complete.")
 
 

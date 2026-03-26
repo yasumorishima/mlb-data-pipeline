@@ -39,6 +39,18 @@ from config import (
 
 pb.cache.enable()
 
+# Budget: FanGraphs fetch is one step within the 180-min job
+BUDGET_MIN = 60
+
+
+def _log_elapsed(label: str, start: float, budget_min: int = BUDGET_MIN):
+    elapsed_min = (time.time() - start) / 60
+    print(f"  [{label}] elapsed: {elapsed_min:.1f} min / {budget_min} min budget")
+    if elapsed_min > budget_min * 0.8:
+        print(f"  ⚠️ WARNING: {label} used {elapsed_min:.0f}/{budget_min} min "
+              f"({elapsed_min / budget_min * 100:.0f}%) — timeout risk!")
+
+
 # =====================================================================
 # Pitcher Plus: per-pitch-type Stuff+/Location+/Pitching+
 # =====================================================================
@@ -208,18 +220,22 @@ def main():
 
     run_all = not (args.batting_only or args.pitching_only or args.plus_only)
 
+    t0 = time.time()
     bat_df = pd.DataFrame()
     pit_df = pd.DataFrame()
     plus_df = pd.DataFrame()
 
     if run_all or args.batting_only:
         bat_df = fetch_batting(args.start_year, args.end_year)
+        _log_elapsed("FanGraphs batting", t0)
 
     if run_all or args.pitching_only:
         pit_df = fetch_pitching(args.start_year, args.end_year)
+        _log_elapsed("FanGraphs pitching", t0)
 
     if run_all or args.plus_only:
         plus_df = fetch_pitcher_plus(2020, args.end_year)
+        _log_elapsed("FanGraphs pitcher plus", t0)
 
     # Validate before upload
     yr_range = (args.start_year, args.end_year)
@@ -245,6 +261,7 @@ def main():
             _load_to_bq(plus_df, "fg_pitcher_plus")
             validate_bq_table("fg_pitcher_plus")
 
+    _log_elapsed("FanGraphs total", t0)
     print("\nFanGraphs fetch complete.")
 
 

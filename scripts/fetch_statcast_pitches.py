@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 from pathlib import Path
 
 import pandas as pd
@@ -26,6 +27,17 @@ from config import BQ_FULL, DATA_DIR, get_bq_client, validate_bq_table
 
 PARQUET_DIR = DATA_DIR / "statcast"
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
+
+# Budget: Statcast pitches is the heaviest step (manual only)
+BUDGET_MIN = 150
+
+
+def _log_elapsed(label: str, start: float, budget_min: int = BUDGET_MIN):
+    elapsed_min = (time.time() - start) / 60
+    print(f"  [{label}] elapsed: {elapsed_min:.1f} min / {budget_min} min budget")
+    if elapsed_min > budget_min * 0.8:
+        print(f"  ⚠️ WARNING: {label} used {elapsed_min:.0f}/{budget_min} min "
+              f"({elapsed_min / budget_min * 100:.0f}%) — timeout risk!")
 
 
 # =====================================================================
@@ -283,6 +295,7 @@ def main():
 
     data_dir = Path(args.data_dir)
 
+    t0 = time.time()
     if not args.load_only and args.years:
         if "-" in args.years:
             start, end = args.years.split("-")
@@ -293,12 +306,14 @@ def main():
         for year in years:
             try:
                 fetch_statcast_year(year)
+                _log_elapsed(f"statcast fetch {year}", t0)
             except Exception as e:
                 print(f"  ERROR fetching {year}: {e}")
                 print(f"  Continuing with next year...")
 
     if not args.no_bq:
         load_to_bq(data_dir, append=args.append)
+        _log_elapsed("statcast BQ load", t0)
 
 
 if __name__ == "__main__":

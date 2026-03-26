@@ -61,6 +61,8 @@ jobs:
       - name: Fetch FanGraphs
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_fangraphs.py \
             --start-year ${{ inputs.start_year || '2015' }} \
@@ -72,6 +74,8 @@ jobs:
       - name: Fetch Savant leaderboards
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'savant')
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_savant_leaderboards.py \
             --start-year ${{ inputs.start_year || '2015' }} \
@@ -83,6 +87,8 @@ jobs:
       - name: Fetch fielding/running
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fielding')
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_fielding_running.py \
             --start-year ${{ inputs.start_year || '2015' }} \
@@ -94,6 +100,8 @@ jobs:
       - name: Fetch park factors
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_park_factors.py \
             --start-year ${{ inputs.start_year || '2015' }} \
@@ -106,6 +114,8 @@ jobs:
       - name: Fetch Statcast pitches
         if: contains(steps.steps.outputs.steps, 'statcast')
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_statcast_pitches.py \
             --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}"
@@ -116,6 +126,8 @@ jobs:
       - name: BQ table summary
         if: always()
         working-directory: scripts
+        env:
+          PYTHONUNBUFFERED: "1"
         run: python bq_summary.py
 
       # ================================================================

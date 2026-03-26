@@ -37,6 +37,18 @@ from config import (
     validate_dataframe,
 )
 
+# Budget: fielding/running is one step within the 180-min job
+BUDGET_MIN = 60
+
+
+def _log_elapsed(label: str, start: float, budget_min: int = BUDGET_MIN):
+    elapsed_min = (time.time() - start) / 60
+    print(f"  [{label}] elapsed: {elapsed_min:.1f} min / {budget_min} min budget")
+    if elapsed_min > budget_min * 0.8:
+        print(f"  ⚠️ WARNING: {label} used {elapsed_min:.0f}/{budget_min} min "
+              f"({elapsed_min / budget_min * 100:.0f}%) — timeout risk!")
+
+
 MIN_YEAR_OAA = 2016
 MIN_YEAR_SPRINT = 2015
 MIN_YEAR_CATCHER = 2015
@@ -270,12 +282,16 @@ def main():
 
     run_all = not (args.sprint_only or args.oaa_only or args.catcher_only)
 
+    t0 = time.time()
     if run_all or args.sprint_only:
         fetch_sprint_speed(args.start_year, args.end_year)
+        _log_elapsed("sprint_speed", t0)
     if run_all or args.oaa_only:
         fetch_oaa(args.start_year, args.end_year)
+        _log_elapsed("oaa", t0)
     if run_all or args.catcher_only:
         fetch_catcher(args.start_year, args.end_year)
+        _log_elapsed("catcher", t0)
 
     # Validate before upload
     yr_range = (args.start_year, args.end_year)
@@ -315,6 +331,7 @@ def main():
             except Exception:
                 pass
 
+    _log_elapsed("fielding/running total", t0)
     print("\nFielding/running fetch complete.")
 
 

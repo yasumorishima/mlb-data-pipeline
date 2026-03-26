@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import time
 
 import pandas as pd
 
@@ -25,6 +26,17 @@ from config import (
     validate_bq_table,
     validate_dataframe,
 )
+
+# Budget: park factors is one step within the 180-min job
+BUDGET_MIN = 15
+
+
+def _log_elapsed(label: str, start: float, budget_min: int = BUDGET_MIN):
+    elapsed_min = (time.time() - start) / 60
+    print(f"  [{label}] elapsed: {elapsed_min:.1f} min / {budget_min} min budget")
+    if elapsed_min > budget_min * 0.8:
+        print(f"  ⚠️ WARNING: {label} used {elapsed_min:.0f}/{budget_min} min "
+              f"({elapsed_min / budget_min * 100:.0f}%) — timeout risk!")
 
 
 def fetch_park_factors(start=START_SEASON, end=END_SEASON) -> pd.DataFrame:
@@ -61,7 +73,9 @@ def main():
     parser.add_argument("--no-bq", action="store_true")
     args = parser.parse_args()
 
+    t0 = time.time()
     df = fetch_park_factors(args.start_year, args.end_year)
+    _log_elapsed("park_factors fetch", t0)
 
     if len(df) > 0:
         validate_dataframe(df, "park_factors",
@@ -72,6 +86,7 @@ def main():
         load_to_bq(df)
         validate_bq_table("park_factors")
 
+    _log_elapsed("park_factors total", t0)
     print("\nPark factors fetch complete.")
 
 
