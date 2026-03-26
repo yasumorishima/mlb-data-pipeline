@@ -59,7 +59,7 @@ jobs:
       # FanGraphs (batting + pitching + pitcher plus)
       # ================================================================
       - name: Fetch FanGraphs
-        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'fangraphs')
+        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')
         working-directory: scripts
         run: |
           python fetch_fangraphs.py \
@@ -70,7 +70,7 @@ jobs:
       # Savant leaderboards (exit velo, expected, bat tracking, etc.)
       # ================================================================
       - name: Fetch Savant leaderboards
-        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'savant')
+        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'savant')
         working-directory: scripts
         run: |
           python fetch_savant_leaderboards.py \
@@ -81,7 +81,7 @@ jobs:
       # Fielding + running (sprint speed, OAA, catcher)
       # ================================================================
       - name: Fetch fielding/running
-        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'fielding')
+        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fielding')
         working-directory: scripts
         run: |
           python fetch_fielding_running.py \
@@ -92,7 +92,7 @@ jobs:
       # Park factors
       # ================================================================
       - name: Fetch park factors
-        if: contains(steps.outputs.steps, 'all') || contains(steps.outputs.steps, 'park')
+        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
         working-directory: scripts
         run: |
           python fetch_park_factors.py \
@@ -103,7 +103,7 @@ jobs:
       # Statcast pitches migration (one-time: mlb_wp -> mlb_shared)
       # ================================================================
       - name: Migrate statcast_pitches
-        if: contains(steps.outputs.steps, 'statcast_migrate')
+        if: contains(steps.steps.outputs.steps, 'statcast_migrate')
         working-directory: scripts
         run: python migrate_statcast_pitches.py
 
@@ -111,7 +111,7 @@ jobs:
       # Delete old statcast_pitches from mlb_wp (one-time cleanup)
       # ================================================================
       - name: Delete mlb_wp.statcast_pitches
-        if: contains(steps.outputs.steps, 'delete_old_statcast')
+        if: contains(steps.steps.outputs.steps, 'delete_old_statcast')
         run: |
           python -c "
           from google.cloud import bigquery
