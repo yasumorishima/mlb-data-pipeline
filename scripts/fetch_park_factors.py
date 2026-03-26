@@ -22,6 +22,8 @@ from config import (
     START_SEASON,
     get_bq_client,
     sanitize_columns,
+    validate_bq_table,
+    validate_dataframe,
 )
 
 
@@ -60,8 +62,15 @@ def main():
     args = parser.parse_args()
 
     df = fetch_park_factors(args.start_year, args.end_year)
+
+    if len(df) > 0:
+        validate_dataframe(df, "park_factors",
+                           expected_years=(args.start_year, args.end_year),
+                           required_cols=["season", "team", "pf_5yr", "pf_hr"])
+
     if not args.no_bq and len(df) > 0:
         load_to_bq(df)
+        validate_bq_table("park_factors")
 
     print("\nPark factors fetch complete.")
 

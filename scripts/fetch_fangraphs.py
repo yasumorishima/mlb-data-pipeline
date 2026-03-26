@@ -33,6 +33,8 @@ from config import (
     get_bq_client,
     map_fg_to_mlbam,
     sanitize_columns,
+    validate_bq_table,
+    validate_dataframe,
 )
 
 pb.cache.enable()
@@ -219,13 +221,29 @@ def main():
     if run_all or args.plus_only:
         plus_df = fetch_pitcher_plus(2020, args.end_year)
 
+    # Validate before upload
+    yr_range = (args.start_year, args.end_year)
+    if len(bat_df) > 0:
+        validate_dataframe(bat_df, "fg_batting", expected_years=yr_range,
+                           required_cols=["player_id", "season", "wOBA", "OPS", "WAR"])
+    if len(pit_df) > 0:
+        validate_dataframe(pit_df, "fg_pitching", expected_years=yr_range,
+                           required_cols=["player_id", "season", "ERA", "FIP", "WAR"])
+    if len(plus_df) > 0:
+        validate_dataframe(plus_df, "fg_pitcher_plus",
+                           expected_years=(max(2020, args.start_year), args.end_year),
+                           required_cols=["player_id", "season", "Stuff+", "Location+"])
+
     if not args.no_bq:
         if len(bat_df) > 0:
             _load_to_bq(bat_df, "fg_batting")
+            validate_bq_table("fg_batting")
         if len(pit_df) > 0:
             _load_to_bq(pit_df, "fg_pitching")
+            validate_bq_table("fg_pitching")
         if len(plus_df) > 0:
             _load_to_bq(plus_df, "fg_pitcher_plus")
+            validate_bq_table("fg_pitcher_plus")
 
     print("\nFanGraphs fetch complete.")
 

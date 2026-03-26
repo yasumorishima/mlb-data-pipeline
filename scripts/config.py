@@ -144,6 +144,117 @@ def get_bq_client():
 
 
 # =====================================================================
+# Data quality validation
+# =====================================================================
+def validate_dataframe(
+    df: pd.DataFrame,
+    table_name: str,
+    expected_years: tuple[int, int] | None = None,
+    required_cols: list[str] | None = None,
+    min_rows_per_year: int = 10,
+    max_null_pct: float = 50.0,
+) -> bool:
+    """Validate DataFrame quality after fetch and before BQ upload.
+
+    Prints detailed report and returns True if all checks pass.
+    """
+    print(f"\n{'─' * 60}")
+    print(f"VALIDATION: {table_name}")
+    print(f"{'─' * 60}")
+
+    ok = True
+
+    # --- Shape ---
+    print(f"  Shape: {df.shape[0]:,} rows × {df.shape[1]} cols")
+    if df.empty:
+        print(f"  ❌ EMPTY DataFrame")
+        return False
+
+    # --- Year coverage ---
+    year_col = next((c for c in ["season", "game_year"] if c in df.columns), None)
+    if year_col and expected_years:
+        years_present = sorted(df[year_col].dropna().unique())
+        years_expected = list(range(expected_years[0], expected_years[1] + 1))
+        missing_years = [y for y in years_expected if y not in years_present]
+        extra_years = [y for y in years_present if y not in years_expected]
+
+        print(f"  Years: {min(years_present)}-{max(years_present)} "
+              f"({len(years_present)} present)")
+        if missing_years:
+            print(f"  ⚠ Missing years: {missing_years}")
+            ok = False
+        if extra_years:
+            print(f"  ℹ Extra years: {extra_years}")
+
+        # Per-year row counts
+        print(f"  Per-year rows:")
+        for y in sorted(years_present):
+            n = (df[year_col] == y).sum()
+            flag = " ⚠ LOW" if n < min_rows_per_year else ""
+            print(f"    {int(y)}: {n:>6,}{flag}")
+            if n < min_rows_per_year:
+                ok = False
+
+    # --- Required columns ---
+    if required_cols:
+        missing_cols = [c for c in required_cols if c not in df.columns]
+        if missing_cols:
+            print(f"  ❌ Missing required columns: {missing_cols}")
+            ok = False
+        else:
+            print(f"  ✓ All {len(required_cols)} required columns present")
+
+    # --- Null rates ---
+    null_pcts = df.isnull().mean() * 100
+    high_null = null_pcts[null_pcts > max_null_pct].sort_values(ascending=False)
+    zero_null = (null_pcts == 0).sum()
+    any_null = (null_pcts > 0).sum()
+
+    print(f"  Nulls: {zero_null} cols 0% null, {any_null} cols with nulls")
+    if len(high_null) > 0:
+        print(f"  ⚠ Columns >{max_null_pct}% null:")
+        for col, pct in high_null.head(10).items():
+            print(f"    {col}: {pct:.1f}%")
+
+    # --- Duplicate check ---
+    key_cols = [c for c in ["player_id", year_col] if c and c in df.columns]
+    if len(key_cols) >= 2:
+        n_dups = df.duplicated(subset=key_cols).sum()
+        if n_dups > 0:
+            print(f"  ⚠ {n_dups} duplicate rows on {key_cols}")
+        else:
+            print(f"  ✓ No duplicates on {key_cols}")
+
+    # --- Column name sanitization preview ---
+    sanitized = sanitize_columns(df.head(0).copy())
+    renamed = [(old, new) for old, new in zip(df.columns, sanitized.columns) if old != new]
+    if renamed:
+        print(f"  Sanitize preview ({len(renamed)} cols renamed):")
+        for old, new in renamed[:5]:
+            print(f"    {old} → {new}")
+        if len(renamed) > 5:
+            print(f"    ... and {len(renamed) - 5} more")
+
+    status = "✓ PASS" if ok else "⚠ WARNINGS"
+    print(f"  Result: {status}")
+    return ok
+
+
+def validate_bq_table(table_name: str) -> None:
+    """Validate a BQ table after upload — row count and schema check."""
+    from google.cloud import bigquery
+
+    client = get_bq_client()
+    table_ref = f"{BQ_FULL}.{table_name}"
+    table = client.get_table(table_ref)
+
+    print(f"  BQ verify: {table_ref}")
+    print(f"    Rows: {table.num_rows:,}")
+    print(f"    Size: {table.num_bytes / 1024**2:.1f} MB")
+    print(f"    Cols: {len(table.schema)} ({', '.join(f.name for f in table.schema[:8])}...)")
+
+
+# =====================================================================
 # MLBAM ID mapping
 # =====================================================================
 def map_fg_to_mlbam(df: pd.DataFrame) -> pd.DataFrame:

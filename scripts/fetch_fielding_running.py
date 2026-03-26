@@ -33,6 +33,8 @@ from config import (
     fetch_with_retry,
     get_bq_client,
     sanitize_columns,
+    validate_bq_table,
+    validate_dataframe,
 )
 
 MIN_YEAR_OAA = 2016
@@ -275,8 +277,43 @@ def main():
     if run_all or args.catcher_only:
         fetch_catcher(args.start_year, args.end_year)
 
+    # Validate before upload
+    yr_range = (args.start_year, args.end_year)
+    if run_all or args.sprint_only:
+        sprint_csv = DATA_DIR / "sprint_speed.csv"
+        if sprint_csv.exists():
+            _df = pd.read_csv(sprint_csv)
+            validate_dataframe(_df, "sprint_speed",
+                               expected_years=(max(2015, yr_range[0]), yr_range[1]),
+                               required_cols=["player_id", "season", "sprint_speed"])
+    if run_all or args.oaa_only:
+        oaa_csv = DATA_DIR / "oaa.csv"
+        if oaa_csv.exists():
+            _df = pd.read_csv(oaa_csv)
+            validate_dataframe(_df, "oaa",
+                               expected_years=(max(2016, yr_range[0]), yr_range[1]),
+                               required_cols=["player_id", "season"])
+        team_csv = DATA_DIR / "oaa_team.csv"
+        if team_csv.exists():
+            _df = pd.read_csv(team_csv)
+            validate_dataframe(_df, "oaa_team",
+                               expected_years=(max(2016, yr_range[0]), yr_range[1]),
+                               required_cols=["team_name", "season", "total_oaa"])
+    if run_all or args.catcher_only:
+        catch_csv = DATA_DIR / "catcher.csv"
+        if catch_csv.exists():
+            _df = pd.read_csv(catch_csv)
+            validate_dataframe(_df, "catcher",
+                               expected_years=(max(2015, yr_range[0]), yr_range[1]),
+                               required_cols=["player_id", "season"])
+
     if not args.no_bq:
         load_all_to_bq()
+        for tn in ["sprint_speed", "oaa", "oaa_team", "catcher"]:
+            try:
+                validate_bq_table(tn)
+            except Exception:
+                pass
 
     print("\nFielding/running fetch complete.")
 
