@@ -108,8 +108,7 @@ jobs:
         working-directory: scripts
         run: |
           python fetch_statcast_pitches.py \
-            --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}" \
-            --append
+            --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}"
 
       # ================================================================
       # BQ summary (always runs after data steps)
