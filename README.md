@@ -92,6 +92,8 @@ Weekly refresh runs every Monday JST 10:00 via GitHub Actions (`weekly_refresh.y
 | `fielding` | manual | Sprint speed + OAA + Catcher |
 | `park` | manual | Park factors のみ |
 
+**CI 可観測性**: 全 5 fetch スクリプトに `PYTHONUNBUFFERED=1` + ステップ別経過時間ログを追加。BQ アップロードやバリデーションのどのフェーズで停止したかをログから即座に特定できる。
+
 ## Migration History
 
 - **Phase 1** (2026-03-25): `statcast_pitches` を `mlb_wp` → `mlb_shared` に移行
