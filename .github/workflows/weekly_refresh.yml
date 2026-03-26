@@ -145,6 +145,6 @@ jobs:
             EMOJI="❌"
           fi
 
-          curl -s -H "Content-Type: application/json" \
+          curl -sS -w "\nHTTP %{http_code}\n" -H "Content-Type: application/json" \
             -d "{\"content\": \"${EMOJI} **mlb-data-pipeline** weekly refresh: ${STATUS}\"}" \
             "$DISCORD_WEBHOOK_URL"
