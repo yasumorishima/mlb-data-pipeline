@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from config import BQ_FULL, DATA_DIR, get_bq_client
+from config import BQ_FULL, DATA_DIR, get_bq_client, validate_bq_table
 
 PARQUET_DIR = DATA_DIR / "statcast"
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
@@ -98,6 +98,14 @@ def _convert_types(df: pd.DataFrame) -> pd.DataFrame:
 # =====================================================================
 # Fetch
 # =====================================================================
+# Expected pitch counts per year (approximate, for validation)
+EXPECTED_PITCHES = {
+    2015: 700_000, 2016: 700_000, 2017: 700_000, 2018: 700_000,
+    2019: 700_000, 2020: 250_000, 2021: 700_000, 2022: 700_000,
+    2023: 720_000, 2024: 740_000, 2025: 740_000,
+}
+
+
 def fetch_statcast_year(year: int) -> Path:
     """Download full Statcast data for one season, save as parquet."""
     from pybaseball import statcast
@@ -106,7 +114,38 @@ def fetch_statcast_year(year: int) -> Path:
     print(f"Fetching Statcast {year} ...")
 
     df = statcast(f"{year}-03-20", f"{year}-11-30")
-    print(f"  {len(df):,} pitches, {len(df.columns)} columns")
+    n = len(df)
+    print(f"  {n:,} pitches, {len(df.columns)} columns")
+
+    # Validate row count
+    expected = EXPECTED_PITCHES.get(year, 600_000)
+    min_expected = int(expected * 0.5)
+    if n < min_expected:
+        print(f"  WARNING: only {n:,} rows (expected ~{expected:,}+)")
+    elif year == 2020:
+        print(f"  OK (shortened 2020 season)")
+    else:
+        print(f"  OK (expected ~{expected:,})")
+
+    # Key column check
+    key_cols = ["game_pk", "pitcher", "batter", "events", "game_year",
+                "release_speed", "launch_speed", "home_team", "away_team"]
+    missing = [c for c in key_cols if c not in df.columns]
+    if missing:
+        print(f"  WARNING: missing key columns: {missing}")
+    else:
+        print(f"  Key columns: all {len(key_cols)} present")
+
+    # Null rate for critical columns
+    for col in ["release_speed", "launch_speed", "events"]:
+        if col in df.columns:
+            null_pct = df[col].isna().mean() * 100
+            print(f"  {col}: {null_pct:.1f}% null")
+
+    # At-bat outcomes (events IS NOT NULL)
+    if "events" in df.columns:
+        ab_count = df["events"].notna().sum()
+        print(f"  At-bat outcomes: {ab_count:,} ({ab_count/n*100:.1f}%)")
 
     df.to_parquet(out_path, index=False)
     print(f"  Saved: {out_path}")
@@ -162,6 +201,23 @@ def load_to_bq(data_dir: Path, append: bool = False):
     table = client.get_table(table_ref)
     print(f"\nBQ: {table_ref} -- {table.num_rows:,} rows, {len(table.schema)} cols, "
           f"{table.num_bytes / 1024**3:.2f} GB")
+
+    # Post-load validation: year coverage
+    q = f"""
+        SELECT CAST(game_year AS INT64) AS yr, COUNT(*) AS n,
+               COUNTIF(events IS NOT NULL) AS ab_outcomes
+        FROM `{table_ref}`
+        GROUP BY yr ORDER BY yr
+    """
+    print("\nYear coverage:")
+    total, total_ab = 0, 0
+    for row in client.query(q).result():
+        total += row.n
+        total_ab += row.ab_outcomes
+        expected = EXPECTED_PITCHES.get(row.yr, 600_000)
+        flag = " LOW" if row.n < expected * 0.5 else ""
+        print(f"  {row.yr}: {row.n:>10,} pitches, {row.ab_outcomes:>8,} ABs{flag}")
+    print(f"  TOTAL: {total:>10,} pitches, {total_ab:>8,} ABs")
 
 
 # =====================================================================
