@@ -1,6 +1,8 @@
 # mlb-data-pipeline
 
-MLB shared data pipeline for BigQuery. Single source of truth for all baseball analytics projects.
+**MLB shared data pipeline for BigQuery.** Single source of truth for all baseball analytics projects.
+
+> **Status (2026-03-26):** `mlb_shared` データセット稼働中。毎週月曜 JST 10:00 自動更新。`statcast_pitches`（6.8M 行）移行完了。
 
 ## Architecture
 
@@ -63,6 +65,27 @@ All projects use the same BQ column naming:
 ## Automation
 
 Weekly refresh runs every Monday via GitHub Actions (`weekly_refresh.yml`).
+
+### Workflow Steps
+
+| Step | Trigger | Description |
+|------|---------|-------------|
+| `all` (default) | `schedule` / `workflow_dispatch` | FanGraphs + Savant + Fielding + Park Factors |
+| `fangraphs` | manual | FanGraphs のみ |
+| `savant` | manual | Savant leaderboards のみ |
+| `fielding` | manual | Sprint speed + OAA + Catcher |
+| `park` | manual | Park factors のみ |
+| `statcast_migrate` | manual (one-time) | `mlb_wp.statcast_pitches` → `mlb_shared` BQ コピー ✅完了 |
+| `delete_old_statcast` | manual (one-time) | 旧 `mlb_wp.statcast_pitches` 削除 ✅完了 |
+
+### Consumer Data Flow
+
+```
+mlb-data-pipeline (weekly_refresh.yml)
+  → BQ: mlb_shared.*
+    ├── baseball-mlops    reads: fg_batting, fg_pitching, statcast_pitches, ...
+    └── mlb-win-probability reads: statcast_pitches (Phase 2: FG stats/fielding も統合予定)
+```
 
 ## Credits
 
