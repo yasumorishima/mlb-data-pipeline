@@ -40,6 +40,8 @@ from config import (
     fetch_with_retry,
     get_bq_client,
     sanitize_columns,
+    validate_bq_table,
+    validate_dataframe,
 )
 
 pb.cache.enable()
@@ -64,6 +66,9 @@ def _yearly_fetch(name, func, start, end, csv_name, **kwargs) -> pd.DataFrame:
         return pd.DataFrame()
 
     out = pd.concat(frames, ignore_index=True)
+    # Normalize year column to lowercase 'season' for consistency with FG tables
+    if "Season" in out.columns:
+        out = out.rename(columns={"Season": "season"})
     path = DATA_DIR / csv_name
     out.to_csv(path, index=False)
     print(f"Saved: {path} ({len(out):,} rows)")
@@ -144,6 +149,8 @@ def fetch_bat_tracking(start=2024, end=END_SEASON) -> pd.DataFrame:
         return pd.DataFrame()
 
     out = pd.concat(frames, ignore_index=True)
+    if "Season" in out.columns:
+        out = out.rename(columns={"Season": "season"})
     path = DATA_DIR / "sc_bat_tracking.csv"
     out.to_csv(path, index=False)
     print(f"Saved: {path} ({len(out):,} rows)")
@@ -159,7 +166,7 @@ def fetch_batted_ball(start=START_SEASON, end=END_SEASON) -> pd.DataFrame:
     for year in range(start, end + 1):
         try:
             df = batted_ball(year, player_type="batter", min_bbe="q")
-            df["Season"] = year
+            df["season"] = year
             frames.append(df)
             print(f"  [{year}] {len(df)} rows")
             time.sleep(1)
@@ -228,16 +235,30 @@ def main():
     parser.add_argument("--no-bq", action="store_true")
     args = parser.parse_args()
 
-    fetch_batter_exitvelo(args.start_year, args.end_year)
-    fetch_batter_expected(args.start_year, args.end_year)
-    fetch_pitcher_exitvelo(args.start_year, args.end_year)
-    fetch_pitcher_expected(args.start_year, args.end_year)
-    fetch_pitcher_arsenal(args.start_year, args.end_year)
-    fetch_bat_tracking(2024, args.end_year)
-    fetch_batted_ball(args.start_year, args.end_year)
+    results = {}
+    results["sc_batter_exitvelo"] = fetch_batter_exitvelo(args.start_year, args.end_year)
+    results["sc_batter_expected"] = fetch_batter_expected(args.start_year, args.end_year)
+    results["sc_pitcher_exitvelo"] = fetch_pitcher_exitvelo(args.start_year, args.end_year)
+    results["sc_pitcher_expected"] = fetch_pitcher_expected(args.start_year, args.end_year)
+    results["sc_pitcher_arsenal"] = fetch_pitcher_arsenal(args.start_year, args.end_year)
+    results["sc_bat_tracking"] = fetch_bat_tracking(2024, args.end_year)
+    results["sc_batted_ball"] = fetch_batted_ball(args.start_year, args.end_year)
+
+    # Validate all fetched data
+    yr = (args.start_year, args.end_year)
+    for table_name, df in results.items():
+        if len(df) == 0:
+            continue
+        yr_range = (2024, args.end_year) if table_name == "sc_bat_tracking" else yr
+        validate_dataframe(df, table_name, expected_years=yr_range)
 
     if not args.no_bq:
         load_all_to_bq()
+        for table_name in TABLE_MAP.values():
+            try:
+                validate_bq_table(table_name)
+            except Exception:
+                pass
 
     print("\nSavant leaderboards fetch complete.")
 
