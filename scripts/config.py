@@ -64,6 +64,7 @@ def sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
       %  -> _pct
       /  -> _per_
       +  -> _plus
+      trailing -  -> _minus  (e.g. ERA- -> ERA_minus, avoids collision with ERA)
       other special chars -> _
       collapse consecutive underscores
       strip leading/trailing underscores
@@ -75,6 +76,8 @@ def sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
         new = new.replace("%", "_pct")
         new = new.replace("/", "_per_")
         new = new.replace("+", "_plus")
+        # Trailing minus (FanGraphs normalized stats: ERA-, FIP-, xFIP-)
+        new = re.sub(r"-$", "_minus", new)
         new = re.sub(r"[^a-zA-Z0-9_]", "_", new)
         new = re.sub(r"_+", "_", new)
         new = new.strip("_")
