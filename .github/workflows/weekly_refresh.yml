@@ -29,7 +29,7 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - uses: actions/checkout@v4
@@ -100,32 +100,16 @@ jobs:
             --end-year ${{ inputs.end_year || '2025' }}
 
       # ================================================================
-      # Statcast pitches migration (one-time: mlb_wp -> mlb_shared)
+      # Statcast pitch-level data (heavy — manual trigger only)
+      # Specify years via start_year/end_year. Appends by default.
       # ================================================================
-      - name: Migrate statcast_pitches
-        if: contains(steps.steps.outputs.steps, 'statcast_migrate')
+      - name: Fetch Statcast pitches
+        if: contains(steps.steps.outputs.steps, 'statcast')
         working-directory: scripts
-        run: python migrate_statcast_pitches.py
-
-      # ================================================================
-      # Delete old statcast_pitches from mlb_wp (one-time cleanup)
-      # ================================================================
-      - name: Delete mlb_wp.statcast_pitches
-        if: contains(steps.steps.outputs.steps, 'delete_old_statcast')
         run: |
-          python -c "
-          from google.cloud import bigquery
-          client = bigquery.Client(project='data-platform-490901')
-          src = 'data-platform-490901.mlb_wp.statcast_pitches'
-          dst = 'data-platform-490901.mlb_shared.statcast_pitches'
-          # Verify destination exists and has rows
-          dt = client.get_table(dst)
-          print(f'Destination: {dst} -- {dt.num_rows:,} rows, {dt.num_bytes/1024**3:.2f} GB')
-          assert dt.num_rows > 6_000_000, f'Destination too small: {dt.num_rows}'
-          # Delete source
-          client.delete_table(src)
-          print(f'Deleted: {src}')
-          "
+          python fetch_statcast_pitches.py \
+            --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}" \
+            --append
 
       # ================================================================
       # BQ summary (always runs after data steps)
