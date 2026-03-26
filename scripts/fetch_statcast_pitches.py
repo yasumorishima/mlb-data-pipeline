@@ -107,13 +107,58 @@ EXPECTED_PITCHES = {
 
 
 def fetch_statcast_year(year: int) -> Path:
-    """Download full Statcast data for one season, save as parquet."""
+    """Download full Statcast data for one season, save as parquet.
+
+    Uses monthly chunks as fallback when Savant returns malformed CSV.
+    """
     from pybaseball import statcast
+    import time
 
     out_path = PARQUET_DIR / f"statcast_{year}.parquet"
     print(f"Fetching Statcast {year} ...")
 
-    df = statcast(f"{year}-03-20", f"{year}-11-30")
+    # Try full season first
+    try:
+        df = statcast(f"{year}-03-20", f"{year}-11-30")
+    except Exception as e:
+        print(f"  Full-season fetch failed: {e}")
+        print(f"  Falling back to monthly chunks...")
+        # Monthly chunks to work around Savant CSV parse errors
+        chunks = []
+        month_ranges = [
+            (f"{year}-03-20", f"{year}-04-30"),
+            (f"{year}-05-01", f"{year}-05-31"),
+            (f"{year}-06-01", f"{year}-06-30"),
+            (f"{year}-07-01", f"{year}-07-31"),
+            (f"{year}-08-01", f"{year}-08-31"),
+            (f"{year}-09-01", f"{year}-09-30"),
+            (f"{year}-10-01", f"{year}-11-30"),
+        ]
+        for start, end in month_ranges:
+            for attempt in range(1, 4):
+                try:
+                    chunk = statcast(start, end)
+                    chunks.append(chunk)
+                    print(f"    {start} to {end}: {len(chunk):,} rows")
+                    break
+                except Exception as e2:
+                    if attempt < 3:
+                        print(f"    {start} to {end}: retry {attempt}/3 ({e2})")
+                        time.sleep(10 * attempt)
+                    else:
+                        print(f"    {start} to {end}: FAILED after 3 attempts")
+            time.sleep(2)
+        if not chunks:
+            print(f"  ERROR: No data fetched for {year}")
+            return out_path
+        df = pd.concat(chunks, ignore_index=True)
+        # Deduplicate (monthly chunks may overlap)
+        if "game_pk" in df.columns and "at_bat_number" in df.columns and "pitch_number" in df.columns:
+            before = len(df)
+            df = df.drop_duplicates(subset=["game_pk", "at_bat_number", "pitch_number"])
+            if len(df) < before:
+                print(f"  Deduped: {before:,} -> {len(df):,}")
+
     n = len(df)
     print(f"  {n:,} pitches, {len(df.columns)} columns")
 
@@ -246,7 +291,11 @@ def main():
             years = [int(args.years)]
 
         for year in years:
-            fetch_statcast_year(year)
+            try:
+                fetch_statcast_year(year)
+            except Exception as e:
+                print(f"  ERROR fetching {year}: {e}")
+                print(f"  Continuing with next year...")
 
     if not args.no_bq:
         load_to_bq(data_dir, append=args.append)
