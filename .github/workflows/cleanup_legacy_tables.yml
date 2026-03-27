@@ -1,0 +1,45 @@
+name: Cleanup Legacy BQ Tables
+
+on:
+  workflow_dispatch:
+    inputs:
+      memo:
+        description: "Execution intent (required)"
+        required: true
+        type: string
+      dry_run:
+        description: "Dry-run mode (list only, no deletion)"
+        required: false
+        type: boolean
+        default: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install google-cloud-bigquery
+
+      - name: Setup GCP credentials
+        env:
+          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          printf '%s' "$GCP_SA_KEY" > /tmp/gcp-sa-key.json
+          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa-key.json" >> $GITHUB_ENV
+
+      - name: Run cleanup
+        working-directory: scripts
+        run: |
+          if [ "${{ inputs.dry_run }}" = "true" ]; then
+            python cleanup_legacy_tables.py --dry-run
+          else
+            python cleanup_legacy_tables.py
+          fi
