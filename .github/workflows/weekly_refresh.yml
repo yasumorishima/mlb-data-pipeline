@@ -1,9 +1,10 @@
 name: Weekly Data Refresh
 
 on:
-  schedule:
-    # Every Monday UTC 01:00 (JST 10:00) — before baseball-mlops retrain (UTC 02:00)
-    - cron: "0 1 * * 1"
+  # Temporarily disabled — data pipeline still stabilising. Re-enable by uncommenting.
+  # schedule:
+  #   # Every Monday UTC 01:00 (JST 10:00) — before baseball-mlops retrain (UTC 02:00)
+  #   - cron: "0 1 * * 1"
   workflow_dispatch:
     inputs:
       memo:
