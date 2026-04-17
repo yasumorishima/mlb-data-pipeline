@@ -33,15 +33,14 @@ import pandas as pd
 import pybaseball as pb
 
 from config import (
-    BQ_FULL,
     DATA_DIR,
+    DATA_TARGET,
     END_SEASON,
     START_SEASON,
     fetch_with_retry,
-    get_bq_client,
-    sanitize_columns,
     validate_bq_table,
     validate_dataframe,
+    write_dataframe,
 )
 
 pb.cache.enable()
@@ -209,11 +208,8 @@ TABLE_MAP = {
 }
 
 
-def load_all_to_bq():
-    """Load all Savant leaderboard CSVs to BigQuery."""
-    from google.cloud import bigquery
-
-    client = get_bq_client()
+def write_all_tables():
+    """Write all Savant leaderboard CSVs to the configured target (BQ or Parquet)."""
     for csv_name, table_name in TABLE_MAP.items():
         path = DATA_DIR / csv_name
         if not path.exists():
@@ -224,16 +220,7 @@ def load_all_to_bq():
         if df.empty:
             continue
 
-        df = sanitize_columns(df)
-        table_ref = f"{BQ_FULL}.{table_name}"
-        job_config = bigquery.LoadJobConfig(
-            write_disposition="WRITE_TRUNCATE",
-            autodetect=True,
-        )
-        job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
-        job.result()
-        table = client.get_table(table_ref)
-        print(f"BQ: {table_ref} -- {table.num_rows:,} rows")
+        write_dataframe(df, table_name)
 
 
 # =====================================================================
@@ -272,12 +259,13 @@ def main():
         validate_dataframe(df, table_name, expected_years=yr_range)
 
     if not args.no_bq:
-        load_all_to_bq()
-        for table_name in TABLE_MAP.values():
-            try:
-                validate_bq_table(table_name)
-            except Exception:
-                pass
+        write_all_tables()
+        if DATA_TARGET == "bq":
+            for table_name in TABLE_MAP.values():
+                try:
+                    validate_bq_table(table_name)
+                except Exception as e:
+                    print(f"  validate_bq_table({table_name}) failed: {type(e).__name__}: {e}")
 
     _log_elapsed("Savant leaderboards total", t0)
     print("\nSavant leaderboards fetch complete.")

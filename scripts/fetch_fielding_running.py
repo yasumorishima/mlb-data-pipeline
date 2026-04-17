@@ -26,15 +26,14 @@ from pathlib import Path
 import pandas as pd
 
 from config import (
-    BQ_FULL,
     DATA_DIR,
+    DATA_TARGET,
     END_SEASON,
     START_SEASON,
     fetch_with_retry,
-    get_bq_client,
-    sanitize_columns,
     validate_bq_table,
     validate_dataframe,
+    write_dataframe,
 )
 
 # Budget: fielding/running is one step within the 180-min job
@@ -238,16 +237,14 @@ def fetch_catcher(start=START_SEASON, end=END_SEASON) -> pd.DataFrame:
 # =====================================================================
 # BQ upload
 # =====================================================================
-def load_all_to_bq():
-    from google.cloud import bigquery
-
+def write_all_tables():
+    """Write all fielding/running tables to the configured target (BQ or Parquet)."""
     table_map = {
         "sprint_speed.csv": "sprint_speed",
         "oaa.csv": "oaa",
         "oaa_team.csv": "oaa_team",
         "catcher.csv": "catcher",
     }
-    client = get_bq_client()
     for csv_name, table_name in table_map.items():
         path = DATA_DIR / csv_name
         if not path.exists():
@@ -255,16 +252,7 @@ def load_all_to_bq():
         df = pd.read_csv(path)
         if df.empty:
             continue
-        df = sanitize_columns(df)
-        table_ref = f"{BQ_FULL}.{table_name}"
-        job_config = bigquery.LoadJobConfig(
-            write_disposition="WRITE_TRUNCATE",
-            autodetect=True,
-        )
-        job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
-        job.result()
-        table = client.get_table(table_ref)
-        print(f"BQ: {table_ref} -- {table.num_rows:,} rows")
+        write_dataframe(df, table_name)
 
 
 # =====================================================================
@@ -324,12 +312,13 @@ def main():
                                required_cols=["player_id", "season"])
 
     if not args.no_bq:
-        load_all_to_bq()
-        for tn in ["sprint_speed", "oaa", "oaa_team", "catcher"]:
-            try:
-                validate_bq_table(tn)
-            except Exception:
-                pass
+        write_all_tables()
+        if DATA_TARGET == "bq":
+            for tn in ["sprint_speed", "oaa", "oaa_team", "catcher"]:
+                try:
+                    validate_bq_table(tn)
+                except Exception as e:
+                    print(f"  validate_bq_table({tn}) failed: {type(e).__name__}: {e}")
 
     _log_elapsed("fielding/running total", t0)
     print("\nFielding/running fetch complete.")

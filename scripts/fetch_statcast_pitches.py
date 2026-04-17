@@ -23,7 +23,13 @@ from pathlib import Path
 
 import pandas as pd
 
-from config import BQ_FULL, DATA_DIR, get_bq_client, validate_bq_table
+from config import (
+    BQ_FULL,
+    DATA_DIR,
+    DATA_TARGET,
+    get_bq_client,
+    write_dataframe,
+)
 
 PARQUET_DIR = DATA_DIR / "statcast"
 PARQUET_DIR.mkdir(parents=True, exist_ok=True)
@@ -212,18 +218,20 @@ def fetch_statcast_year(year: int) -> Path:
 # =====================================================================
 # Load to BQ
 # =====================================================================
-def load_to_bq(data_dir: Path, append: bool = False):
-    """Load parquet files to BigQuery, one year at a time."""
-    from google.cloud import bigquery
+def load_pitches(data_dir: Path, append: bool = False):
+    """Load intermediate parquet files to the configured target (BQ or Parquet).
 
-    client = get_bq_client()
+    Reads statcast_YYYY.parquet files from data_dir, applies computed columns
+    + type conversion, then writes to output:
+      - BQ mode: single statcast_pitches table (WRITE_TRUNCATE first year, APPEND rest)
+      - Parquet mode: one file per year at PARQUET_ROOT/statcast_pitches/statcast_pitches_YYYY.parquet
+    """
     parquets = sorted(data_dir.glob("statcast_*.parquet"))
     if not parquets:
         print(f"ERROR: No parquet files in {data_dir}")
         return
 
     print(f"Found {len(parquets)} parquet files")
-    table_ref = f"{BQ_FULL}.statcast_pitches"
     total_rows = 0
 
     for i, pf in enumerate(parquets):
@@ -234,47 +242,45 @@ def load_to_bq(data_dir: Path, append: bool = False):
         df = _add_computed_columns(df)
         df = _convert_types(df)
 
-        if append:
-            disposition = "WRITE_APPEND"
+        if DATA_TARGET == "parquet":
+            write_dataframe(df, "statcast_pitches", suffix=f"_{year_label}")
         else:
-            disposition = "WRITE_TRUNCATE" if i == 0 else "WRITE_APPEND"
+            if append:
+                disposition = "WRITE_APPEND"
+            else:
+                disposition = "WRITE_TRUNCATE" if i == 0 else "WRITE_APPEND"
+            write_dataframe(df, "statcast_pitches", bq_disposition=disposition)
 
-        job_config = bigquery.LoadJobConfig(
-            write_disposition=disposition,
-            autodetect=True,
-        )
-        if disposition == "WRITE_APPEND":
-            job_config.schema_update_options = [
-                bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
-            ]
-
-        print(f"  Loading to BQ ({disposition})...")
-        job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
-        job.result()
         total_rows += len(df)
-        print(f"  Done: {len(df):,} rows")
         del df
 
-    table = client.get_table(table_ref)
-    print(f"\nBQ: {table_ref} -- {table.num_rows:,} rows, {len(table.schema)} cols, "
-          f"{table.num_bytes / 1024**3:.2f} GB")
+    if DATA_TARGET == "bq":
+        client = get_bq_client()
+        table_ref = f"{BQ_FULL}.statcast_pitches"
+        table = client.get_table(table_ref)
+        print(f"\nBQ: {table_ref} -- {table.num_rows:,} rows, {len(table.schema)} cols, "
+              f"{table.num_bytes / 1024**3:.2f} GB")
 
-    # Post-load validation: year coverage
-    q = f"""
-        SELECT CAST(game_year AS INT64) AS yr, COUNT(*) AS n,
-               COUNTIF(events IS NOT NULL) AS ab_outcomes
-        FROM `{table_ref}`
-        GROUP BY yr ORDER BY yr
-    """
-    print("\nYear coverage:")
-    total, total_ab = 0, 0
-    for row in client.query(q).result():
-        total += row.n
-        total_ab += row.ab_outcomes
-        expected = EXPECTED_PITCHES.get(row.yr, 600_000)
-        flag = " LOW" if row.n < expected * 0.5 else ""
-        print(f"  {row.yr}: {row.n:>10,} pitches, {row.ab_outcomes:>8,} ABs{flag}")
-    print(f"  TOTAL: {total:>10,} pitches, {total_ab:>8,} ABs")
+        # Post-load validation: year coverage
+        # noqa comment on string-open line to silence Ruff S608
+        # (table_ref built from BQ_FULL module constant, not user input)
+        q = f"""
+            SELECT CAST(game_year AS INT64) AS yr, COUNT(*) AS n,
+                   COUNTIF(events IS NOT NULL) AS ab_outcomes
+            FROM `{table_ref}`
+            GROUP BY yr ORDER BY yr
+        """  # noqa: S608
+        print("\nYear coverage:")
+        total, total_ab = 0, 0
+        for row in client.query(q).result():
+            total += row.n
+            total_ab += row.ab_outcomes
+            expected = EXPECTED_PITCHES.get(row.yr, 600_000)
+            flag = " LOW" if row.n < expected * 0.5 else ""
+            print(f"  {row.yr}: {row.n:>10,} pitches, {row.ab_outcomes:>8,} ABs{flag}")
+        print(f"  TOTAL: {total:>10,} pitches, {total_ab:>8,} ABs")
+    else:
+        print(f"\nParquet: {total_rows:,} rows total across {len(parquets)} files")
 
 
 # =====================================================================
@@ -312,8 +318,8 @@ def main():
                 print(f"  Continuing with next year...")
 
     if not args.no_bq:
-        load_to_bq(data_dir, append=args.append)
-        _log_elapsed("statcast BQ load", t0)
+        load_pitches(data_dir, append=args.append)
+        _log_elapsed("statcast load", t0)
 
 
 if __name__ == "__main__":
