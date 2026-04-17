@@ -7,6 +7,7 @@ All scripts import from here to ensure consistency.
 
 from __future__ import annotations
 
+import functools
 import os
 import re
 import time
@@ -125,8 +126,9 @@ def sanitize_columns(df: pd.DataFrame) -> pd.DataFrame:
 # =====================================================================
 # GCP Authentication
 # =====================================================================
+@functools.lru_cache(maxsize=1)
 def get_bq_client():
-    """Get authenticated BigQuery client.
+    """Get authenticated BigQuery client (cached — auth runs once per process).
 
     Priority:
       1. GCP_SA_KEY env var (GitHub Actions — base64 or raw JSON)
@@ -330,6 +332,12 @@ def write_dataframe(
     df = sanitize_columns(df)
 
     if DATA_TARGET == "parquet":
+        if bq_disposition == "WRITE_APPEND" and not suffix:
+            raise ValueError(
+                "write_dataframe: WRITE_APPEND in parquet mode requires a non-empty "
+                "`suffix` (e.g. '_2024') to partition output; otherwise previous "
+                "file is silently overwritten."
+            )
         out_dir = PARQUET_ROOT / table_name
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / f"{table_name}{suffix}.parquet"

@@ -317,8 +317,8 @@ def main():
             for tn in ["sprint_speed", "oaa", "oaa_team", "catcher"]:
                 try:
                     validate_bq_table(tn)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"  validate_bq_table({tn}) failed: {type(e).__name__}: {e}")
 
     _log_elapsed("fielding/running total", t0)
     print("\nFielding/running fetch complete.")

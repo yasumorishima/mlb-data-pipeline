@@ -264,8 +264,8 @@ def main():
             for table_name in TABLE_MAP.values():
                 try:
                     validate_bq_table(table_name)
-                except Exception:
-                    pass
+                except Exception as e:
+                    print(f"  validate_bq_table({table_name}) failed: {type(e).__name__}: {e}")
 
     _log_elapsed("Savant leaderboards total", t0)
     print("\nSavant leaderboards fetch complete.")

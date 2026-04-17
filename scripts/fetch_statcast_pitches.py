@@ -28,7 +28,6 @@ from config import (
     DATA_DIR,
     DATA_TARGET,
     get_bq_client,
-    validate_bq_table,
     write_dataframe,
 )
 
@@ -263,12 +262,14 @@ def load_pitches(data_dir: Path, append: bool = False):
               f"{table.num_bytes / 1024**3:.2f} GB")
 
         # Post-load validation: year coverage
+        # noqa comment on string-open line to silence Ruff S608
+        # (table_ref built from BQ_FULL module constant, not user input)
         q = f"""
             SELECT CAST(game_year AS INT64) AS yr, COUNT(*) AS n,
                    COUNTIF(events IS NOT NULL) AS ab_outcomes
             FROM `{table_ref}`
             GROUP BY yr ORDER BY yr
-        """
+        """  # noqa: S608
         print("\nYear coverage:")
         total, total_ab = 0, 0
         for row in client.query(q).result():
