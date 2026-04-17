@@ -30,6 +30,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import subprocess
@@ -37,6 +38,7 @@ import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Callable
 
 SCRIPT_DIR = Path(__file__).parent
 REPO_DIR = SCRIPT_DIR.parent
@@ -83,12 +85,25 @@ def load_state() -> dict:
     }
 
 
-def save_state(state: dict) -> None:
-    state["last_run"] = _now()
+def update_state(mutator: Callable[[dict], None]) -> dict:
+    """Atomic read-modify-write on state.json under exclusive file lock.
+
+    Prevents races when multiple orchestrator processes run concurrently
+    (e.g. systemd timer fire overlapping with a manual --force-unit run).
+    `mutator` mutates the state dict in-place and returns None.
+    Returns the post-mutation state.
+    """
     STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
-    tmp = STATE_PATH.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, indent=2))
-    tmp.replace(STATE_PATH)
+    lock_path = STATE_PATH.with_suffix(".lock")
+    with open(lock_path, "w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        state = load_state()
+        mutator(state)
+        state["last_run"] = _now()
+        tmp = STATE_PATH.with_suffix(".tmp")
+        tmp.write_text(json.dumps(state, indent=2))
+        tmp.replace(STATE_PATH)
+    return state
 
 
 def pick_next_unit(state: dict, force: str | None = None):
@@ -202,8 +217,10 @@ def main() -> int:
     if unit is None:
         # All units done
         if state.get("mode") == "backfill":
-            state["mode"] = "complete"
-            save_state(state)
+            def _to_complete(s: dict) -> None:
+                s["mode"] = "complete"
+
+            state = update_state(_to_complete)
             n_done, _, n_total = progress_counts(state)
             notify_discord(f"🎉 Backfill complete ({n_done}/{n_total} units)")
             print(f"Backfill complete: {n_done}/{n_total} units. Mode -> complete.")
@@ -217,18 +234,30 @@ def main() -> int:
         print(f"[dry-run] next unit: {uid} -> {script} {extra_args}")
         return 0
 
-    state["units"][uid] = {"status": "in_progress", "last_attempt": _now()}
-    save_state(state)
+    def _mark_in_progress(s: dict) -> None:
+        s["units"][uid] = {"status": "in_progress", "last_attempt": _now()}
+
+    update_state(_mark_in_progress)
 
     ok, err = run_unit(uid, script, extra_args)
 
     if ok:
-        state["units"][uid] = {"status": "completed", "last_attempt": _now()}
-    else:
-        state["units"][uid] = {"status": "failed", "last_attempt": _now(), "error": err or ""}
-        notify_discord(f"Unit {uid} failed: {(err or '')[:400]}")
+        def _mark_done(s: dict) -> None:
+            s["units"][uid] = {"status": "completed", "last_attempt": _now()}
 
-    save_state(state)
+        state = update_state(_mark_done)
+    else:
+        err_msg = err or ""
+
+        def _mark_failed(s: dict) -> None:
+            s["units"][uid] = {
+                "status": "failed",
+                "last_attempt": _now(),
+                "error": err_msg,
+            }
+
+        state = update_state(_mark_failed)
+        notify_discord(f"Unit {uid} failed: {err_msg[:400]}")
 
     n_done, n_failed, n_total = progress_counts(state)
     print(f"Progress: {n_done}/{n_total} completed, {n_failed} failed")
