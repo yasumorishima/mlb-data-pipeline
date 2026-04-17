@@ -1,0 +1,17 @@
+[Unit]
+Description=MLB Data Backfill (one work unit per invocation)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Environment=MLB_DATA_TARGET=parquet
+Environment=MLB_PARQUET_ROOT=/mnt/ssd/mlb_shared
+Environment=MLB_VENV_PYTHON=/mnt/ssd/venv/bin/python
+# Optional: DISCORD_WEBHOOK_URL for failure notifications
+EnvironmentFile=-%h/.config/mlb-backfill.env
+WorkingDirectory=/mnt/ssd/mlb-data-pipeline
+ExecStart=/mnt/ssd/venv/bin/python /mnt/ssd/mlb-data-pipeline/scripts/run_backfill.py
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=4h

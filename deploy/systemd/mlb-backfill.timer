@@ -1,0 +1,12 @@
+[Unit]
+Description=MLB Data Backfill Timer (fires every 3 hours)
+Requires=mlb-backfill.service
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=3h
+Persistent=true
+Unit=mlb-backfill.service
+
+[Install]
+WantedBy=timers.target
