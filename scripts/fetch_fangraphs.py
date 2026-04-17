@@ -25,16 +25,15 @@ import pandas as pd
 import pybaseball as pb
 
 from config import (
-    BQ_FULL,
     DATA_DIR,
+    DATA_TARGET,
     END_SEASON,
     START_SEASON,
     fetch_with_retry,
-    get_bq_client,
     map_fg_to_mlbam,
-    sanitize_columns,
     validate_bq_table,
     validate_dataframe,
+    write_dataframe,
 )
 
 pb.cache.enable()
@@ -184,28 +183,6 @@ def fetch_pitcher_plus(
 
 
 # =====================================================================
-# BQ upload
-# =====================================================================
-def _load_to_bq(df: pd.DataFrame, table_name: str) -> None:
-    """Load DataFrame to BigQuery with sanitized columns."""
-    from google.cloud import bigquery
-
-    df_bq = sanitize_columns(df.copy())
-    client = get_bq_client()
-    table_ref = f"{BQ_FULL}.{table_name}"
-
-    job_config = bigquery.LoadJobConfig(
-        write_disposition="WRITE_TRUNCATE",
-        autodetect=True,
-    )
-    job = client.load_table_from_dataframe(df_bq, table_ref, job_config=job_config)
-    job.result()
-
-    table = client.get_table(table_ref)
-    print(f"BQ: {table_ref} -- {table.num_rows:,} rows, {len(table.schema)} cols")
-
-
-# =====================================================================
 # Main
 # =====================================================================
 def main():
@@ -252,14 +229,17 @@ def main():
 
     if not args.no_bq:
         if len(bat_df) > 0:
-            _load_to_bq(bat_df, "fg_batting")
-            validate_bq_table("fg_batting")
+            write_dataframe(bat_df, "fg_batting")
+            if DATA_TARGET == "bq":
+                validate_bq_table("fg_batting")
         if len(pit_df) > 0:
-            _load_to_bq(pit_df, "fg_pitching")
-            validate_bq_table("fg_pitching")
+            write_dataframe(pit_df, "fg_pitching")
+            if DATA_TARGET == "bq":
+                validate_bq_table("fg_pitching")
         if len(plus_df) > 0:
-            _load_to_bq(plus_df, "fg_pitcher_plus")
-            validate_bq_table("fg_pitcher_plus")
+            write_dataframe(plus_df, "fg_pitcher_plus")
+            if DATA_TARGET == "bq":
+                validate_bq_table("fg_pitcher_plus")
 
     _log_elapsed("FanGraphs total", t0)
     print("\nFanGraphs fetch complete.")

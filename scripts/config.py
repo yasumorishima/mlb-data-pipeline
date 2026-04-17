@@ -34,6 +34,21 @@ DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 # =====================================================================
+# Output target (BQ vs local Parquet on RPi5 SSD)
+# =====================================================================
+# MLB_DATA_TARGET=bq       (default) -> load to BigQuery mlb_shared
+# MLB_DATA_TARGET=parquet  -> write Parquet to MLB_PARQUET_ROOT
+#
+# MLB_PARQUET_ROOT defaults to DATA_DIR/parquet_out but is typically set to
+# /mnt/ssd/mlb_shared on the RPi5 host.
+DATA_TARGET = os.environ.get("MLB_DATA_TARGET", "bq").lower()
+if DATA_TARGET not in ("bq", "parquet"):
+    raise ValueError(
+        f"MLB_DATA_TARGET must be 'bq' or 'parquet', got '{DATA_TARGET}'"
+    )
+PARQUET_ROOT = Path(os.environ.get("MLB_PARQUET_ROOT", str(DATA_DIR / "parquet_out")))
+
+# =====================================================================
 # Retry
 # =====================================================================
 MAX_RETRIES = 3
@@ -286,3 +301,56 @@ def map_fg_to_mlbam(df: pd.DataFrame) -> pd.DataFrame:
     # Keep FG ID as fg_id (baseball-mlops uses it as join key)
     df = df.rename(columns={"IDfg": "fg_id"})
     return df
+
+
+# =====================================================================
+# Unified writer (BQ or local Parquet)
+# =====================================================================
+def write_dataframe(
+    df: pd.DataFrame,
+    table_name: str,
+    *,
+    suffix: str = "",
+    bq_disposition: str = "WRITE_TRUNCATE",
+) -> None:
+    """Write DataFrame to the configured output target.
+
+    Args:
+        df: DataFrame to write. Columns are auto-sanitized.
+        table_name: Logical table name (used as BQ table or parquet subdir).
+        suffix: Suffix appended to parquet filename for partitioning
+                (e.g. "_2024" produces statcast_pitches_2024.parquet).
+                Ignored in BQ mode.
+        bq_disposition: 'WRITE_TRUNCATE' (default) or 'WRITE_APPEND' for chunked loads.
+                        Ignored in parquet mode (always overwrites per suffix).
+
+    Parquet mode writes to: PARQUET_ROOT/<table_name>/<table_name><suffix>.parquet
+    BQ mode writes to:      <BQ_FULL>.<table_name>
+    """
+    df = sanitize_columns(df)
+
+    if DATA_TARGET == "parquet":
+        out_dir = PARQUET_ROOT / table_name
+        out_dir.mkdir(parents=True, exist_ok=True)
+        out_path = out_dir / f"{table_name}{suffix}.parquet"
+        df.to_parquet(out_path, index=False)
+        size_mb = out_path.stat().st_size / 1024**2
+        print(f"  Parquet: {out_path.name} ({len(df):,} rows, {size_mb:.1f} MB)")
+        return
+
+    # BQ mode
+    from google.cloud import bigquery
+
+    client = get_bq_client()
+    table_ref = f"{BQ_FULL}.{table_name}"
+    job_config = bigquery.LoadJobConfig(
+        write_disposition=bq_disposition,
+        autodetect=True,
+    )
+    if bq_disposition == "WRITE_APPEND":
+        job_config.schema_update_options = [
+            bigquery.SchemaUpdateOption.ALLOW_FIELD_ADDITION,
+        ]
+    job = client.load_table_from_dataframe(df, table_ref, job_config=job_config)
+    job.result()
+    print(f"  BQ: {table_ref} loaded ({len(df):,} rows, {bq_disposition})")
