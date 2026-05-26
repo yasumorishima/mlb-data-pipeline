@@ -4,6 +4,8 @@
 
 > **Status (2026-04-17):** Phase 3 進行中。実行基盤を GitHub Actions + BigQuery → **RPi5 self-hosted + `/mnt/ssd/mlb_shared` (Parquet)** に移行中。新規の experiments / evaluation は Parquet 参照を前提。BigQuery は完全移行後に退役。
 
+> **Data:** Dataset migration to public [Hugging Face Datasets](https://huggingface.co/yasumorishima) is planned.
+
 ## Architecture
 
 ```
