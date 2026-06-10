@@ -1,24 +1,23 @@
 # mlb-data-pipeline
 
-**MLB shared data pipeline.** Fetches from FanGraphs / Baseball Savant and writes to either local Parquet (RPi5 primary) or BigQuery (legacy).
+**MLB shared data pipeline.** Fetches from FanGraphs / Baseball Savant and publishes Parquet to a public Hugging Face Dataset.
 
-> **Status (2026-04-17):** Phase 3 進行中。実行基盤を GitHub Actions + BigQuery → **RPi5 self-hosted + `/mnt/ssd/mlb_shared` (Parquet)** に移行中。新規の experiments / evaluation は Parquet 参照を前提。BigQuery は完全移行後に退役。
+> **Status (2026-06-10):** 実行基盤は **GitHub Actions（ubuntu-latest, 週次）**、データ正本は **Hugging Face Dataset [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats)**。BigQuery は 2026-04-19 退役、RPi5 SSD は 2026-05-29 廃止（経緯は Migration History 参照）。
 
-> **Data:** Published as a public Hugging Face Dataset → [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats).
+> **Known limitation:** FanGraphs 由来テーブル（`fg_*` + `park_factors`）は datacenter IP からの 403 ブロックにより GHA から取得不可（2026-06-10 検証）。週次 refresh で自動更新されるのは **Savant 系テーブルのみ**で、`fg_*` / `park_factors` は HF 上の 2026-04 救出スナップショットを静的保持。
 
 ## Architecture
 
 ```
-FanGraphs API ─┐                               ┌─ MLB_DATA_TARGET=parquet
-Savant API ────┤  scripts/fetch_*.py  ─────────┤    → /mnt/ssd/mlb_shared/<table>/<table>.parquet
-savant-extras ─┘  (unified write_dataframe)    │
-                                               └─ MLB_DATA_TARGET=bq (legacy)
-                                                    → data-platform-490901.mlb_shared.*
+FanGraphs API ─┐
+Savant API ────┤  scripts/fetch_*.py  ──→  Parquet (MLB_DATA_TARGET=parquet)
+savant-extras ─┘  (unified write_dataframe)      │
+                                                 └─→ hf upload → HF Dataset yasumorishima/mlb-stats
 
-Orchestrator (new):  scripts/run_backfill.py
-  - Runs one work unit per invocation
-  - Tracks progress in <PARQUET_ROOT>/.state.json (fcntl-locked)
-  - Fired every 3h by deploy/systemd/mlb-backfill.timer on RPi5
+Automation: .github/workflows/weekly_refresh.yml
+  - Every Monday UTC 01:00 (JST 10:00) + workflow_dispatch
+  - fangraphs / savant / fielding / park を fetch → Parquet → HF へ upload
+  - statcast (pitch-level, heavy) は manual dispatch のみ
 ```
 
 ## Tables
@@ -42,7 +41,13 @@ Orchestrator (new):  scripts/run_backfill.py
 | `park_factors` | Savant | 329 | Stadium park factors (2015-2025) |
 | `statcast_pitches` | Savant | 6.8M+ | Full pitch-level data (2015-2025, 122 cols) |
 
-Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `statcast_pitches_2025.parquet`); all other tables are single files.
+Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `statcast_pitches_2025.parquet`); all other tables are single files. HF 上ではテーブル名のファイルがルート直下に置かれる（例: `fg_batting.parquet`）。
+
+| 更新区分 | テーブル |
+|---|---|
+| 週次自動更新（Savant） | `sc_*`, `sprint_speed`, `oaa`, `oaa_team`, `catcher` |
+| 静的（FanGraphs 403、2026-04 スナップショット） | `fg_batting`, `fg_pitching`, `fg_pitcher_plus`, `park_factors` |
+| 手動 dispatch のみ（重量） | `statcast_pitches` |
 
 ## Consumers
 
@@ -51,23 +56,33 @@ Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `stat
 | [baseball-mlops](https://github.com/yasumorishima/baseball-mlops) | Weekly Retrain 停止中 | fg_batting, fg_pitching, sc_*, sprint_speed, park_factors |
 | [mlb-win-probability](https://github.com/yasumorishima/mlb-win-probability) | Cloud Run 削除済 | statcast_pitches, fg_batting, fg_pitching, sprint_speed, oaa_team, catcher, park_factors |
 
-読み取り側は Parquet 参照に書き換え予定。書き換え完了次第 BigQuery `mlb_shared` を退役。
+読み取り側は HF Dataset 参照（`hf_hub_download` / `pandas.read_parquet` + HF URL）を前提に再設計する。
 
 ## Output targets
 
 | Env var | Default | Effect |
 |---------|---------|--------|
-| `MLB_DATA_TARGET` | `bq` | `bq` = load to BigQuery. `parquet` = write to `MLB_PARQUET_ROOT`. |
-| `MLB_PARQUET_ROOT` | `data/parquet_out` | Parquet output directory (typically `/mnt/ssd/mlb_shared` on RPi5). |
+| `MLB_DATA_TARGET` | `bq` | `parquet` = write to `MLB_PARQUET_ROOT`（現行運用）。`bq` は legacy（BQ 退役済のため使用しない）。 |
+| `MLB_PARQUET_ROOT` | `data/parquet_out` | Parquet output directory. |
 
 ## Usage
+
+### GitHub Actions（primary）
+
+```bash
+# 週次 cron (Mon UTC 01:00) が全テーブル refresh + HF upload を自動実行。手動は:
+gh workflow run "Weekly Data Refresh" --repo yasumorishima/mlb-data-pipeline \
+  -f memo="実行意図" -f steps=all -f start_year=2015 -f end_year=2026
+
+# 重い statcast pitch-level は明示指定のみ
+gh workflow run "Weekly Data Refresh" --repo yasumorishima/mlb-data-pipeline \
+  -f memo="statcast 2024" -f steps=statcast -f start_year=2024 -f end_year=2024
+```
 
 ### Manual single-fetcher run
 
 ```bash
-# Parquet output on RPi5
 export MLB_DATA_TARGET=parquet
-export MLB_PARQUET_ROOT=/mnt/ssd/mlb_shared
 
 python scripts/fetch_fangraphs.py
 python scripts/fetch_savant_leaderboards.py
@@ -80,23 +95,9 @@ python scripts/fetch_fangraphs.py --batting-only
 python scripts/fetch_fielding_running.py --sprint-only
 ```
 
-### Orchestrated backfill (recommended for RPi5)
+### Orchestrated backfill（legacy, RPi5 時代の仕組み）
 
-```bash
-# Show progress table
-python scripts/run_backfill.py --status
-
-# Dry-run: show what would execute next
-python scripts/run_backfill.py --dry-run
-
-# Run next pending unit (one per invocation)
-python scripts/run_backfill.py
-
-# Force re-run of a specific unit
-python scripts/run_backfill.py --force-unit statcast_2018
-```
-
-The orchestrator picks the next pending (or previously-failed) unit each invocation and writes to `MLB_PARQUET_ROOT`. Progress persists in `<MLB_PARQUET_ROOT>/.state.json`. See `deploy/systemd/README.md` for the systemd timer deployment that fires this every 3h.
+`scripts/run_backfill.py` は 1 invocation = 1 work unit の orchestrator（進捗は `<MLB_PARQUET_ROOT>/.state.json`）。RPi5 systemd timer 運用（`deploy/systemd/`）は SSD 廃止に伴い停止済みだが、スクリプト自体はローカル一括 backfill に再利用可能。
 
 ## Column Sanitization (unified)
 
@@ -106,7 +107,7 @@ All outputs use the same column naming rules via `config.sanitize_columns()`:
 - `+` → `_plus` (e.g., `Stuff+` → `Stuff_plus`)
 - trailing `-` → `_minus` (e.g., `ERA-` → `ERA_minus`)
 
-`write_dataframe()` in `config.py` auto-applies sanitization before writing to either target.
+`write_dataframe()` in `config.py` auto-applies sanitization before writing.
 
 ## Data Quality
 
@@ -116,23 +117,15 @@ All outputs use the same column naming rules via `config.sanitize_columns()`:
 - **null 率**: 高 null カラム（>50%）を警告、年×カラムの null マトリクス
 - **必須カラム**: player_id, season, 主要指標の存在確認
 - **重複チェック**: player_id × season の一意性
-- **BQ 検証** (bq mode only): アップロード後の行数・サイズ・スキーマ照合
-
-## Automation
-
-### RPi5 systemd timer (primary)
-
-See `deploy/systemd/README.md` for install instructions. Fires every 3h, picks the next pending unit, notifies Discord on failure + final completion.
-
-### GitHub Actions `weekly_refresh.yml` (disabled)
-
-Cron trigger is commented out as of 2026-04-11. Manual `workflow_dispatch` still available for BQ-mode runs if needed (not actively used).
 
 ## Migration History
 
 - **Phase 1** (2026-03-25): `statcast_pitches` を `mlb_wp` → `mlb_shared` に移行
 - **Phase 2** (2026-03-26): FG stats / fielding / park_factors を `mlb_shared` に統合。mlb-win-probability の独自 fetch スクリプト削除。`mlb_statcast` データセット削除
-- **Phase 3** (2026-04-17 進行中): 実行基盤を RPi5 + Parquet に移行。`MLB_DATA_TARGET` env + `run_backfill.py` 追加。BQ 依存を剥がして local Parquet を primary に。完了次第 BigQuery `mlb_shared` 退役
+- **Phase 3** (2026-04-17): 実行基盤を RPi5 + Parquet に移行。`MLB_DATA_TARGET` env + `run_backfill.py` 追加。17/17 work units backfill 完走
+- **BQ 退役** (2026-04-19): Parquet vs BQ reconcile 後、BigQuery `mlb_shared` データセット削除
+- **HF 移行** (2026-05-27〜29): RPi5 USB SSD 故障・廃止に伴い、全データを public HF Dataset [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats) へ移行（HF が正本）
+- **Phase 4** (2026-06-10): 週次 refresh を GitHub Actions（ubuntu-latest, 無料）+ HF upload に再構築、cron 再開
 
 ## Credits
 
