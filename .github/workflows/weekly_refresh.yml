@@ -1,10 +1,9 @@
 name: Weekly Data Refresh
 
 on:
-  # Temporarily disabled — data pipeline still stabilising. Re-enable by uncommenting.
-  # schedule:
-  #   # Every Monday UTC 01:00 (JST 10:00) — before baseball-mlops retrain (UTC 02:00)
-  #   - cron: "0 1 * * 1"
+  schedule:
+    # Every Monday UTC 01:00 (JST 10:00)
+    - cron: "0 1 * * 1"
   workflow_dispatch:
     inputs:
       memo:
@@ -25,12 +24,19 @@ on:
         description: "End year override"
         required: false
         type: string
-        default: "2025"
+        default: "2026"
 
+# Storage: data is written as local Parquet then pushed to the public
+# Hugging Face dataset yasumorishima/mlb-stats (BigQuery retired 2026-04-19,
+# RPi5 SSD retired 2026-05-29 -> HF is the canonical store). No GCP needed.
 jobs:
   refresh:
     runs-on: ubuntu-latest
     timeout-minutes: 180
+    env:
+      MLB_DATA_TARGET: parquet
+      MLB_PARQUET_ROOT: ${{ github.workspace }}/data/parquet_out
+      PYTHONUNBUFFERED: "1"
 
     steps:
       - uses: actions/checkout@v4
@@ -41,13 +47,6 @@ jobs:
 
       - name: Install dependencies
         run: pip install -r requirements.txt
-
-      - name: Setup GCP credentials
-        env:
-          GCP_SA_KEY: ${{ secrets.GCP_SA_KEY }}
-        run: |
-          printf '%s' "$GCP_SA_KEY" > /tmp/gcp-sa-key.json
-          echo "GOOGLE_APPLICATION_CREDENTIALS=/tmp/gcp-sa-key.json" >> $GITHUB_ENV
 
       - name: Determine steps
         id: steps
@@ -62,12 +61,10 @@ jobs:
       - name: Fetch FanGraphs
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')
         working-directory: scripts
-        env:
-          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_fangraphs.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2025' }}
+            --end-year ${{ inputs.end_year || '2026' }}
 
       # ================================================================
       # Savant leaderboards (exit velo, expected, bat tracking, etc.)
@@ -75,12 +72,10 @@ jobs:
       - name: Fetch Savant leaderboards
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'savant')
         working-directory: scripts
-        env:
-          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_savant_leaderboards.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2025' }}
+            --end-year ${{ inputs.end_year || '2026' }}
 
       # ================================================================
       # Fielding + running (sprint speed, OAA, catcher)
@@ -88,12 +83,10 @@ jobs:
       - name: Fetch fielding/running
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fielding')
         working-directory: scripts
-        env:
-          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_fielding_running.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2025' }}
+            --end-year ${{ inputs.end_year || '2026' }}
 
       # ================================================================
       # Park factors
@@ -101,51 +94,75 @@ jobs:
       - name: Fetch park factors
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
         working-directory: scripts
-        env:
-          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_park_factors.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2025' }}
+            --end-year ${{ inputs.end_year || '2026' }}
 
       # ================================================================
-      # Statcast pitch-level data (heavy — manual trigger only)
-      # Specify years via start_year/end_year. Appends by default.
+      # Statcast pitch-level data (heavy - manual trigger only)
       # ================================================================
       - name: Fetch Statcast pitches
         if: contains(steps.steps.outputs.steps, 'statcast')
         working-directory: scripts
-        env:
-          PYTHONUNBUFFERED: "1"
         run: |
           python fetch_statcast_pitches.py \
             --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}"
 
       # ================================================================
-      # BQ summary (always runs after data steps)
+      # List parquet outputs (diagnostic, always runs)
       # ================================================================
-      - name: BQ table summary
+      - name: List parquet outputs
         if: always()
-        working-directory: scripts
+        run: |
+          echo "Parquet outputs under data/parquet_out:"
+          find data/parquet_out -name '*.parquet' -printf '%10s  %p\n' 2>/dev/null || true
+
+      # ================================================================
+      # Upload to Hugging Face (public dataset, flattened to root to
+      # match existing layout: <table>/<table>.parquet -> <table>.parquet)
+      # ================================================================
+      - name: Install huggingface_hub
+        run: pip install --quiet "huggingface_hub>=0.26"
+
+      - name: Upload to Hugging Face
         env:
-          PYTHONUNBUFFERED: "1"
-        run: python bq_summary.py
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          shopt -s nullglob
+          count=0
+          for f in data/parquet_out/*/*.parquet; do
+            base="$(basename "$f")"
+            echo "Uploading $f -> $base"
+            hf upload yasumorishima/mlb-stats "$f" "$base" \
+              --repo-type dataset \
+              --commit-message "Weekly refresh: $base"
+            count=$((count + 1))
+          done
+          echo "Uploaded $count parquet file(s) to yasumorishima/mlb-stats"
+          if [ "$count" -eq 0 ]; then
+            echo "No parquet files produced — failing so the issue is visible"
+            exit 1
+          fi
 
       # ================================================================
       # Discord notification
       # ================================================================
       - name: Notify Discord
-        if: always() && env.DISCORD_WEBHOOK_URL != ''
+        if: always()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "no webhook configured"
+            exit 0
+          fi
           STATUS="${{ job.status }}"
           if [ "$STATUS" = "success" ]; then
             EMOJI="✅"
           else
             EMOJI="❌"
           fi
-
           curl -sS -w "\nHTTP %{http_code}\n" -H "Content-Type: application/json" \
-            -d "{\"content\": \"${EMOJI} **mlb-data-pipeline** weekly refresh: ${STATUS}\"}" \
+            -d "{\"content\": \"${EMOJI} **mlb-data-pipeline** weekly refresh -> HF mlb-stats: ${STATUS}\"}" \
             "$DISCORD_WEBHOOK_URL"
