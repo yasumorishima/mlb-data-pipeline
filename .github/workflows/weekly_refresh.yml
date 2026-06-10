@@ -29,6 +29,11 @@ on:
 # Storage: data is written as local Parquet then pushed to the public
 # Hugging Face dataset yasumorishima/mlb-stats (BigQuery retired 2026-04-19,
 # RPi5 SSD retired 2026-05-29 -> HF is the canonical store). No GCP needed.
+#
+# Known limitation: FanGraphs (fg_* tables + park_factors) returns 403 from
+# datacenter IPs (GHA / RPi5 both blocked, verified 2026-06-10 run 27280519531
+# and 27282419304). Those steps are continue-on-error so the Savant tables
+# still refresh weekly; fg_* on HF remain the 2026-04 rescued snapshot.
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -57,9 +62,11 @@ jobs:
 
       # ================================================================
       # FanGraphs (batting + pitching + pitcher plus)
+      # continue-on-error: FanGraphs 403s datacenter IPs (see header note)
       # ================================================================
       - name: Fetch FanGraphs
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')
+        continue-on-error: true
         working-directory: scripts
         run: |
           python fetch_fangraphs.py \
@@ -90,9 +97,11 @@ jobs:
 
       # ================================================================
       # Park factors
+      # continue-on-error: source is fangraphs.com/guts.aspx -> same 403
       # ================================================================
       - name: Fetch park factors
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
+        continue-on-error: true
         working-directory: scripts
         run: |
           python fetch_park_factors.py \
