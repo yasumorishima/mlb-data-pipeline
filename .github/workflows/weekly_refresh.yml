@@ -34,6 +34,10 @@ on:
 # datacenter IPs (GHA / RPi5 both blocked, verified 2026-06-10 run 27280519531
 # and 27282419304). Those steps are continue-on-error so the Savant tables
 # still refresh weekly; fg_* on HF remain the 2026-04 rescued snapshot.
+permissions:
+  contents: read
+  actions: write
+
 jobs:
   refresh:
     runs-on: ubuntu-latest
@@ -175,3 +179,17 @@ jobs:
           curl -sS -w "\nHTTP %{http_code}\n" -H "Content-Type: application/json" \
             -d "{\"content\": \"${EMOJI} **mlb-data-pipeline** weekly refresh -> HF mlb-stats: ${STATUS}\"}" \
             "$DISCORD_WEBHOOK_URL"
+
+      # ================================================================
+      # Keep the schedule alive
+      # ================================================================
+      # GitHub disables scheduled workflows after 60 days without repository
+      # activity. This job only uploads to Hugging Face and never commits, so
+      # the timer never resets on its own. Re-asserting "enabled" every run
+      # keeps the cron alive (same approach as wbc-scouting/keepalive.yml,
+      # which has survived 75+ days without a push).
+      - name: Keep workflow enabled (reset 60-day inactivity timer)
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/weekly_refresh.yml/enable"
