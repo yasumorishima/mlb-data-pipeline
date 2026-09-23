@@ -416,6 +416,32 @@ def test_the_park_step_is_not_excused():
         "park factors comes from Savant now; a failure there is a real failure")
 
 
+def test_the_dataset_card_exists_and_is_published():
+    card = ROOT / "docs" / "hf_dataset_card.md"
+    assert card.exists(), "the dataset card is gone"
+    text = _workflow_text()
+    assert "docs/hf_dataset_card.md" in text, "the card is never uploaded"
+    upload = text[text.index("- name: Upload to Hugging Face"):]
+    assert "docs/hf_dataset_card.md" in upload, "the card ships from some other step"
+
+
+def test_the_dataset_card_names_every_table():
+    """A card that stops listing a table is a card that lies by omission."""
+    card = (ROOT / "docs" / "hf_dataset_card.md").read_text(encoding="utf-8")
+    for step, tables in C.STEP_TABLES.items():
+        for table in tables:
+            assert table in card, step + "/" + table + " is missing from the dataset card"
+
+
+def test_the_dataset_card_says_which_tables_are_stale():
+    card = (ROOT / "docs" / "hf_dataset_card.md").read_text(encoding="utf-8")
+    for table in C.KNOWN_UNREACHABLE:
+        line = [l for l in card.splitlines() if table in l and "|" in l]
+        assert line, table + " has no row in the dataset card table"
+        assert "frozen" in line[0].lower(), (
+            table + " is declared unreachable but the card does not call it frozen")
+
+
 def _standalone() -> int:
     tests = [(name, obj) for name, obj in sorted(globals().items())
              if name.startswith("test_") and callable(obj)]

@@ -217,6 +217,12 @@ jobs:
             exit 1
           fi
 
+          # The dataset card lives in this repo so it cannot drift from the
+          # pipeline, and ships from the same job that ships the data.
+          # tests/test_check_outputs.py fails if it stops naming a table.
+          hf upload yasumorishima/mlb-stats docs/hf_dataset_card.md README.md             --repo-type dataset             --commit-message "Update dataset card"
+          echo "Updated the dataset card"
+
       # ================================================================
       # The audit ran with continue-on-error so the healthy tables could
       # still be published. Turn the run red here, after the upload, so
