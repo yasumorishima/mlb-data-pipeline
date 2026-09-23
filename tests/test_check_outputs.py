@@ -442,6 +442,52 @@ def test_the_dataset_card_says_which_tables_are_stale():
             table + " is declared unreachable but the card does not call it frozen")
 
 
+def _card_configs() -> dict:
+    """config_name -> data_files, parsed without pyyaml.
+
+    pyyaml reaches the runner only as a transitive dependency of wandb, and
+    a test that skips itself when an import fails is a test that can stop
+    checking without anyone noticing.
+    """
+    text = (ROOT / "docs" / "hf_dataset_card.md").read_text(encoding="utf-8")
+    assert text.startswith("---"), "the card has no YAML front matter"
+    front = text.split("---")[1].splitlines()
+    configs, name = {}, None
+    inside = False
+    for line in front:
+        if line.rstrip() == "configs:":
+            inside = True
+            continue
+        if inside and line and not line.startswith(" "):
+            break
+        if not inside:
+            continue
+        stripped = line.strip()
+        if stripped.startswith("- config_name:"):
+            name = stripped.split(":", 1)[1].strip()
+        elif stripped.startswith("data_files:") and name is not None:
+            configs[name] = stripped.split(":", 1)[1].strip()
+            name = None
+    return configs
+
+
+def test_the_card_declares_one_configuration_per_table():
+    """A single config over *.parquet groups tables with different schemas.
+
+    The Hub then tries to read them as one dataset and the viewer breaks.
+    """
+    declared = _card_configs()
+    assert declared, "no configs parsed out of the card front matter"
+    expected = {t for step, tables in C.STEP_TABLES.items() if step != "statcast"
+                for t in tables}
+    assert set(declared) == expected, (
+        "card configs do not match the tables: "
+        + str(sorted(set(declared) ^ expected)))
+    for name, files in declared.items():
+        assert files == name + ".parquet", name + " points at " + str(files)
+        assert "*" not in files, name + " uses a glob"
+
+
 def _standalone() -> int:
     tests = [(name, obj) for name, obj in sorted(globals().items())
              if name.startswith("test_") and callable(obj)]

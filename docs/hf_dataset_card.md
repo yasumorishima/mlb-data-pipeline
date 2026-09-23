@@ -8,8 +8,36 @@ tags:
 language:
   - en
 configs:
-  - config_name: default
-    data_files: "*.parquet"
+  - config_name: catcher
+    data_files: catcher.parquet
+  - config_name: fg_batting
+    data_files: fg_batting.parquet
+  - config_name: fg_pitcher_plus
+    data_files: fg_pitcher_plus.parquet
+  - config_name: fg_pitching
+    data_files: fg_pitching.parquet
+  - config_name: oaa
+    data_files: oaa.parquet
+  - config_name: oaa_team
+    data_files: oaa_team.parquet
+  - config_name: park_factors
+    data_files: park_factors.parquet
+  - config_name: sc_bat_tracking
+    data_files: sc_bat_tracking.parquet
+  - config_name: sc_batted_ball
+    data_files: sc_batted_ball.parquet
+  - config_name: sc_batter_exitvelo
+    data_files: sc_batter_exitvelo.parquet
+  - config_name: sc_batter_expected
+    data_files: sc_batter_expected.parquet
+  - config_name: sc_pitcher_arsenal
+    data_files: sc_pitcher_arsenal.parquet
+  - config_name: sc_pitcher_exitvelo
+    data_files: sc_pitcher_exitvelo.parquet
+  - config_name: sc_pitcher_expected
+    data_files: sc_pitcher_expected.parquet
+  - config_name: sprint_speed
+    data_files: sprint_speed.parquet
 ---
 
 # MLB Shared Stats
