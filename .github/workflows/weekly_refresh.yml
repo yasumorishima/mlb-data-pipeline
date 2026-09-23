@@ -21,10 +21,20 @@ on:
         type: string
         default: "2015"
       end_year:
-        description: "End year override"
+        description: "End year override (default: latest season past opening day)"
         required: false
         type: string
-        default: "2026"
+        default: ""
+      allow_lost_seasons:
+        description: "Comma-separated tables allowed to drop seasons already on Hugging Face (deliberate runs only)"
+        required: false
+        type: string
+        default: ""
+      allow_statsapi_shrink:
+        description: "Publish statsapi_* even if a completed season lost players (check the ids first)"
+        required: false
+        type: boolean
+        default: false
 
 # Storage: data is written as local Parquet then pushed to the public
 # Hugging Face dataset yasumorishima/mlb-stats (BigQuery retired 2026-04-19,
@@ -69,10 +79,50 @@ jobs:
 
       - name: Determine steps
         id: steps
+        env:
+          END_YEAR_INPUT: ${{ inputs.end_year }}
         run: |
           STEPS="${{ inputs.steps || 'all' }}"
           echo "steps=$STEPS" >> $GITHUB_OUTPUT
           echo "Running steps: $STEPS"
+          # The end year used to default to a literal '2026' in every step,
+          # so from 2027 the weekly job would have kept refreshing through
+          # 2026 and stayed green while the new season never arrived.
+          # "This calendar year" is wrong too: before opening day the new
+          # season has no rows (the Stats API returns 0 splits), and every
+          # fetch that checks its year range would fail each January to
+          # March. Opening day is not enough either: regularSeasonStartDate
+          # is the overseas opener (2025-03-18 in Tokyo), and on 2025-03-24
+          # only 2 of 30 clubs had played. So this season counts once every
+          # club in today's standings has played a game. Before the season
+          # the standings are empty and the previous season is used; if an
+          # outage made them look empty mid-season, the current season
+          # would be missing from every file and the output audit refuses
+          # to publish a table that lost a season.
+          END_YEAR="$END_YEAR_INPUT"
+          if [ -z "$END_YEAR" ]; then
+            YEAR="$(date -u +%Y)"
+            TODAY="$(date -u +%F)"
+            COUNTS="$(curl --max-time 30 --retry 5 --retry-all-errors --retry-delay 10 -fsS \
+              "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=${YEAR}&date=${TODAY}" \
+              | jq -r '[.records[].teamRecords[]] | "\(length) \(map(select(.wins + .losses > 0)) | length)"')"
+            read -r CLUBS PLAYED <<< "$COUNTS"
+            case "$CLUBS $PLAYED" in
+              *[!0-9\ ]*|" "*|*" ") echo "Could not read the ${YEAR} standings (got '$COUNTS')"; exit 1 ;;
+            esac
+            if [ "$CLUBS" -gt 0 ] && [ "$PLAYED" -eq "$CLUBS" ]; then
+              END_YEAR="$YEAR"
+            else
+              END_YEAR=$((YEAR - 1))
+            fi
+            echo "Standings ${YEAR} on ${TODAY}: ${PLAYED}/${CLUBS} clubs have played"
+          fi
+          case "$END_YEAR" in
+            [0-9][0-9][0-9][0-9]) ;;
+            *) echo "end_year must be a 4-digit year, got '$END_YEAR'"; exit 1 ;;
+          esac
+          echo "end_year=$END_YEAR" >> $GITHUB_OUTPUT
+          echo "End year: $END_YEAR"
 
       # ================================================================
       # FanGraphs (batting + pitching + pitcher plus)
@@ -85,7 +135,7 @@ jobs:
         run: |
           python fetch_fangraphs.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2026' }}
+            --end-year ${{ steps.steps.outputs.end_year }}
 
       # ================================================================
       # Savant leaderboards (exit velo, expected, bat tracking, etc.)
@@ -96,7 +146,7 @@ jobs:
         run: |
           python fetch_savant_leaderboards.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2026' }}
+            --end-year ${{ steps.steps.outputs.end_year }}
 
       # ================================================================
       # Fielding + running (sprint speed, OAA, catcher)
@@ -107,7 +157,7 @@ jobs:
         run: |
           python fetch_fielding_running.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2026' }}
+            --end-year ${{ steps.steps.outputs.end_year }}
 
       # ================================================================
       # Park factors (Baseball Savant statcast-park-factors)
@@ -121,7 +171,29 @@ jobs:
         run: |
           python fetch_park_factors.py \
             --start-year ${{ inputs.start_year || '2015' }} \
-            --end-year ${{ inputs.end_year || '2026' }}
+            --end-year ${{ steps.steps.outputs.end_year }}
+
+      # ================================================================
+      # MLB Stats API season + sabermetrics (statsapi_batting / _pitching)
+      # Keyless and reachable from this runner, so not continue-on-error.
+      # The step is called "statsapi", not "stats": contains() is a
+      # substring match and "stats" would also select "statcast".
+      # Its tests run first so a broken gate cannot publish.
+      # ================================================================
+      - name: Fetch MLB Stats API
+        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'statsapi')
+        working-directory: scripts
+        env:
+          ALLOW_SHRINK: ${{ inputs.allow_statsapi_shrink }}
+        run: |
+          python ../tests/test_fetch_statsapi.py
+          EXTRA=""
+          if [ "$ALLOW_SHRINK" = "true" ]; then
+            EXTRA="--allow-shrink"
+          fi
+          python fetch_statsapi.py \
+            --start-year ${{ inputs.start_year || '2015' }} \
+            --end-year ${{ steps.steps.outputs.end_year }} $EXTRA
 
       # ================================================================
       # Statcast pitch-level data (heavy - manual trigger only)
@@ -131,7 +203,7 @@ jobs:
         working-directory: scripts
         run: |
           python fetch_statcast_pitches.py \
-            --years "${{ inputs.start_year || '2024' }}-${{ inputs.end_year || '2024' }}"
+            --years "${{ inputs.start_year || '2024' }}-${{ steps.steps.outputs.end_year }}"
 
       # ================================================================
       # List parquet outputs (diagnostic, always runs)
@@ -163,10 +235,13 @@ jobs:
         # continue-on-error so the tables that ARE fine still get
         # uploaded; the last step in the job turns the run red.
         continue-on-error: true
+        env:
+          ALLOW_LOST_SEASONS: ${{ inputs.allow_lost_seasons }}
         run: |
           python scripts/check_outputs.py \
             --steps "${{ steps.steps.outputs.steps }}" \
-            --ok-list ok_tables.txt
+            --ok-list ok_tables.txt \
+            --allow-lost-seasons "$ALLOW_LOST_SEASONS"
 
       # ================================================================
       # Upload to Hugging Face (public dataset, flattened to root to

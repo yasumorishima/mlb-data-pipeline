@@ -38,8 +38,19 @@ def _write(root: Path, table: str, rows: int, suffix: str = "") -> Path:
     return path
 
 
-def _run(steps: str, root: Path, **kwargs) -> int:
+def _run(steps: str, root: Path, published=None, **kwargs) -> int:
+    """Run the audit against `root`.
+
+    `published` stands in for the copies on Hugging Face: a dict of
+    table -> set of seasons, or a callable. Absent tables read as "not
+    published yet", so no test touches the network.
+    """
     original = C.PARQUET_ROOT
+    original_pub = C._published_seasons
+    if callable(published):
+        C._published_seasons = published
+    else:
+        C._published_seasons = lambda table: (published or {}).get(table)
     C.PARQUET_ROOT = root
     assert C.PARQUET_ROOT != original, "PARQUET_ROOT was not substituted"
     assert str(C.PARQUET_ROOT).startswith(tempfile.gettempdir()), C.PARQUET_ROOT
@@ -52,6 +63,7 @@ def _run(steps: str, root: Path, **kwargs) -> int:
     finally:
         sys.argv = argv
         C.PARQUET_ROOT = original
+        C._published_seasons = original_pub
 
 
 def _populate(root: Path, steps: list[str], skip=frozenset()) -> None:
@@ -342,6 +354,217 @@ def test_summary_names_the_missing_tables():
         named = closing[0].replace("*", " ").replace(",", " ").split()
         assert "oaa" in named, f"the closing line does not name oaa: {closing[0]}"
         assert "not uploaded" in text
+
+
+# ------------------------------------------- seasons the published copy has
+
+
+def _tmp() -> Path:
+    return Path(tempfile.mkdtemp(prefix="check_outputs_"))
+
+
+def test_a_season_the_published_copy_has_and_this_run_lacks_fails():
+    root = _tmp()
+    _populate(root, ["park"])  # writes season 2026 only
+    ok = root / "ok.txt"
+    code = _run("park", root, published={"park_factors": {2025, 2026}}, ok_list=ok)
+    assert code == 1
+    assert "park_factors" not in ok.read_text(encoding="utf-8").split(), (
+        "a table that lost seasons would replace the full copy on Hugging Face")
+
+
+def test_the_same_or_more_seasons_than_published_passes():
+    root = _tmp()
+    _populate(root, ["park"])
+    assert _run("park", root, published={"park_factors": {2026}}) == 0
+
+
+def test_nothing_published_yet_passes():
+    root = _tmp()
+    _populate(root, ["park"])
+    assert _run("park", root, published={}) == 0
+
+
+def test_an_unreadable_published_copy_fails_rather_than_skipping():
+    def broken(table):
+        raise C.SeasonCheckError("published " + table + ": HTTP 503")
+    root = _tmp()
+    _populate(root, ["park"])
+    ok = root / "ok.txt"
+    assert _run("park", root, published=broken, ok_list=ok) == 1
+    assert ok.read_text(encoding="utf-8").strip() == ""
+
+
+def test_a_file_without_a_season_column_fails():
+    root = _tmp()
+    d = root / "park_factors"
+    d.mkdir(parents=True)
+    pd.DataFrame({"year": [2026] * 5}).to_parquet(d / "park_factors.parquet")
+    assert _run("park", root, published={"park_factors": {2026}}) == 1
+
+
+def test_the_partitioned_table_is_not_compared():
+    root = _tmp()
+    _write(root, "statcast_pitches", 10, "_2026")
+    calls = []
+
+    def pub(table):
+        calls.append(table)
+        return {2015, 2026}
+    assert _run("statcast", root, published=pub) == 0
+    assert "statcast_pitches" not in calls
+
+
+def test_published_seasons_404_is_none_and_other_errors_raise():
+    import urllib.error
+    import urllib.request
+
+    def raising(exc):
+        def urlopen(req, timeout=None):
+            raise exc
+        return urlopen
+    real = urllib.request.urlopen
+    real_sleep = C._sleep
+    C._sleep = lambda s: None
+    try:
+        urllib.request.urlopen = raising(
+            urllib.error.HTTPError("u", 404, "nf", {}, None))
+        assert C._published_seasons("park_factors") is None
+        for exc in (urllib.error.HTTPError("u", 503, "x", {}, None),
+                    urllib.error.URLError("down"), ConnectionResetError("reset")):
+            urllib.request.urlopen = raising(exc)
+            try:
+                C._published_seasons("park_factors")
+            except C.SeasonCheckError:
+                continue
+            raise AssertionError(f"{exc!r} did not raise")
+    finally:
+        urllib.request.urlopen = real
+        C._sleep = real_sleep
+
+
+def test_published_seasons_rejects_a_body_that_is_not_parquet():
+    import io
+    import urllib.request
+
+    class R(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+    real = urllib.request.urlopen
+    real_sleep = C._sleep
+    C._sleep = lambda s: None
+    try:
+        urllib.request.urlopen = lambda req, timeout=None: R(b"<html>busy</html>")
+        try:
+            C._published_seasons("park_factors")
+        except C.SeasonCheckError:
+            return
+        raise AssertionError("an HTML body was accepted")
+    finally:
+        urllib.request.urlopen = real
+        C._sleep = real_sleep
+
+
+def _parquet_body(seasons):
+    import io
+    buf = io.BytesIO()
+    pd.DataFrame({"season": list(seasons)}).to_parquet(buf)
+    return buf.getvalue()
+
+
+def _play(outcomes):
+    """urlopen stand-in that plays outcomes in order; counts calls."""
+    import io
+
+    class R(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+    state = {"calls": 0}
+
+    def urlopen(req, timeout=None):
+        state["calls"] += 1
+        out = outcomes.pop(0)
+        if isinstance(out, BaseException):
+            raise out
+        return R(out)
+    return urlopen, state
+
+
+def test_published_seasons_retries_a_blip_then_reads():
+    import http.client
+    import urllib.error
+    import urllib.request
+    urlopen, state = _play([urllib.error.HTTPError("u", 502, "x", {}, None),
+                            http.client.IncompleteRead(b""),
+                            _parquet_body([2025, 2026])])
+    real, real_sleep = urllib.request.urlopen, C._sleep
+    urllib.request.urlopen, C._sleep = urlopen, (lambda s: None)
+    try:
+        assert C._published_seasons("park_factors") == {2025, 2026}
+    finally:
+        urllib.request.urlopen, C._sleep = real, real_sleep
+    assert state["calls"] == 3
+
+
+def test_published_seasons_does_not_retry_a_permanent_4xx():
+    import urllib.error
+    import urllib.request
+    urlopen, state = _play([urllib.error.HTTPError("u", 401, "x", {}, None),
+                            _parquet_body([2026])])
+    real, real_sleep = urllib.request.urlopen, C._sleep
+    urllib.request.urlopen, C._sleep = urlopen, (lambda s: None)
+    try:
+        try:
+            C._published_seasons("park_factors")
+        except C.SeasonCheckError:
+            pass
+        else:
+            raise AssertionError("a 401 was read as a copy")
+    finally:
+        urllib.request.urlopen, C._sleep = real, real_sleep
+    assert state["calls"] == 1
+
+
+def test_allow_lost_seasons_lets_only_the_named_table_through():
+    root = _tmp()
+    _populate(root, ["park", "fielding"])  # every file has season 2026 only
+    ok = root / "ok.txt"
+    published = {"park_factors": {2025, 2026}, "oaa": {2025, 2026}}
+    code = _run("park,fielding", root, published=published, ok_list=ok,
+                allow_lost_seasons="park_factors")
+    listed = ok.read_text(encoding="utf-8").split()
+    assert "park_factors" in listed, "the named table was still refused"
+    assert "oaa" not in listed, "a table nobody named was let through"
+    assert code == 1, "oaa still lost a season; the run must stay red"
+
+
+def test_allow_lost_seasons_alone_passes_when_it_is_the_only_problem():
+    root = _tmp()
+    _populate(root, ["park"])
+    code = _run("park", root, published={"park_factors": {2025, 2026}},
+                allow_lost_seasons="park_factors")
+    assert code == 0
+
+
+def test_allow_lost_seasons_rejects_an_unknown_table():
+    root = _tmp()
+    _populate(root, ["park"])
+    assert _run("park", root, allow_lost_seasons="park_factor") == 1
+
+
+def test_the_workflow_passes_allow_lost_seasons_to_the_audit():
+    text = _workflow_text()
+    block = text[text.index("- name: Audit outputs"):][:900]
+    assert "ALLOW_LOST_SEASONS: ${{ inputs.allow_lost_seasons }}" in block, (
+        "the input never reaches the step environment")
+    assert '--allow-lost-seasons "$ALLOW_LOST_SEASONS"' in block, (
+        "the environment value is not what the audit receives")
 
 
 # ------------------------------------------------------- the workflow wiring

@@ -38,6 +38,10 @@ configs:
     data_files: sc_pitcher_expected.parquet
   - config_name: sprint_speed
     data_files: sprint_speed.parquet
+  - config_name: statsapi_batting
+    data_files: statsapi_batting.parquet
+  - config_name: statsapi_pitching
+    data_files: statsapi_pitching.parquet
 ---
 
 # MLB Shared Stats
@@ -58,7 +62,7 @@ one.
 | `sc_pitcher_exitvelo.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_batter_expected.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_pitcher_expected.parquet` | Baseball Savant | 2015– | weekly |
-| `sc_pitcher_arsenal.parquet` | Baseball Savant | 2015– | weekly |
+| `sc_pitcher_arsenal.parquet` | Baseball Savant | 2017– | weekly |
 | `sc_batted_ball.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_bat_tracking.parquet` | Baseball Savant | 2024– (Hawk-Eye) | weekly |
 | `sprint_speed.parquet` | Baseball Savant | 2015– | weekly |
@@ -66,6 +70,8 @@ one.
 | `oaa_team.parquet` | Baseball Savant | 2016– | weekly |
 | `catcher.parquet` | Baseball Savant | 2015– | weekly |
 | `park_factors.parquet` | Baseball Savant | 2015– | weekly (added 2026-09-23) |
+| `statsapi_batting.parquet` | MLB Stats API | 2015– | weekly (added 2026-09-23) |
+| `statsapi_pitching.parquet` | MLB Stats API | 2015– | weekly (added 2026-09-23) |
 | `fg_batting.parquet` | FanGraphs | 2015–**2025** | ⚠️ **frozen 2026-04** |
 | `fg_pitching.parquet` | FanGraphs | 2015–**2025** | ⚠️ **frozen 2026-04** |
 | `fg_pitcher_plus.parquet` | FanGraphs | 2020–**2025** | ⚠️ **frozen 2026-04** |
@@ -89,6 +95,75 @@ So these three tables hold a rescue snapshot taken in 2026-04, which ends
 with the 2025 season. **They contain no 2026 rows.** The pipeline reports
 them on every run and the exemption has an expiry date, so this cannot
 quietly become permanent.
+
+For current wOBA / wRC+ / WAR / FIP / xFIP, use `statsapi_batting` and
+`statsapi_pitching` below. They are **not** FanGraphs tables.
+
+## `statsapi_batting` / `statsapi_pitching`
+
+From the [MLB Stats API](https://statsapi.mlb.com/api/v1/stats), keyless:
+`stats=season` (counting and rate stats) joined with `stats=sabermetrics`
+(wOBA, wRAA, wRC, wRC+, WAR and its components for hitters; FIP, xFIP,
+FIP-, ERA-, WAR, RA9-WAR, leverage for pitchers), `playerPool=ALL`. Column
+names are the API's own (`plateAppearances`, `wRcPlus`, `xfip`, …).
+Responses carry "Copyright MLB Advanced Media, L.P." and point to the terms
+at <http://gdx.mlb.com/components/copyright.txt>.
+
+**MLB does not document how its sabermetrics feed is computed or where it
+comes from.** What we measured, 2026-09-23, joining on MLBAM `player_id`
+against the frozen FanGraphs snapshot above (every one of its 5,703 hitter
+and 4,648 pitcher rows matched):
+
+- Counting stats agree exactly (HR, SO; PA within 1).
+- 2015–2021: wOBA within 0.002, wRC+ within 0.5 (FanGraphs stores
+  integers), WAR within 0.2, FIP / xFIP within 0.005 — i.e. rounding.
+- 2022–2025: wOBA still within 0.006, but wRC+ differs by up to 1.0 (2022,
+  2023), 3.4 (2024) and 5.6 (2025), and the 2025 difference is lined up by
+  club (ATH +5.1, CIN −3.1). Park factors were revised after the snapshot.
+  WAR follows: up to 0.34 for hitters in 2024, and 0.39 for hitters and
+  0.40 for pitchers in 2025. One 2024 pitcher differs by 0.31 in FIP and
+  0.32 in xFIP; the other 433 by ≤ 0.005.
+
+So **past seasons can change from one week to the next**; every run
+refetches every season.
+
+Rows and columns:
+
+- One row per `(player_id, season)`, every player who appeared, not a
+  qualified subset (e.g. 1,252 hitters in 2015 against 546 in the FanGraphs
+  snapshot). The hitter count falls from ~1,250 to ~770 in 2022 because the
+  universal DH ended pitchers batting.
+- A player who changed clubs has **one row with his season total**.
+  `last_team_id` is the club he finished with and `num_teams` how many he
+  played for. It is not "his stats for that club".
+- `is_partial` is true for the current season. `fetched_at` is when the row
+  was read.
+- `inningsPitched` is kept as the API's string: `"5.1"` means five and one
+  third innings, not 5.1. Use `outs / 3`.
+- Rates are absent where the denominator is zero: `woba` / `wRcPlus` for
+  hitters with 0 PA (288 of 1,252 in 2015), `fip` / `xfip` for a pitcher
+  with 0 outs. Placeholder strings such as `".---"` become null.
+- In the current season a pitcher can appear in `stats=season` before
+  `stats=sabermetrics` (one in 2026); his sabermetric columns are null.
+
+The fetch fails and these two tables are not published if a response was
+truncated (`totalSplits` ≠ rows returned), answered for another season,
+lacks a required stat, repeats a player, has a player only the
+sabermetrics side knows, or if a completed season now has fewer players
+than the copy already published here. A run that checked the ids and
+knows MLB removed a player (e.g. merged a duplicate id) can publish with
+the `allow_statsapi_shrink` workflow input.
+
+For every table except `statcast_pitches` (one file per season, so a
+narrower run cannot remove the others), the output audit also refuses to
+publish a file that lacks a season the published copy has, so a manual
+run over a narrower year range cannot delete seasons from here. A
+deliberate removal has to name the table in the `allow_lost_seasons`
+workflow input.
+
+The weekly run covers seasons up to the latest one in which every club
+has played a game, read from the Stats API standings; before that (and
+through an overseas opening series) it stops at the previous season.
 
 ### Why you can trust the "weekly" column
 
@@ -145,6 +220,9 @@ print(pf[pf["season"] == 2026].nlargest(3, "pf_3yr")[["team", "venue_name", "pf_
 
 - [Baseball Savant](https://baseballsavant.mlb.com/) — MLB Advanced Media
 - [FanGraphs](https://www.fangraphs.com/) — the three `fg_*` tables
+- [MLB Stats API](https://statsapi.mlb.com/) — `statsapi_batting` and
+  `statsapi_pitching`; responses state "Copyright MLB Advanced Media,
+  L.P." and refer to <http://gdx.mlb.com/components/copyright.txt>
 - Fetched with [pybaseball](https://github.com/jldbc/pybaseball) and
   [savant-extras](https://github.com/yasumorishima/savant-extras)
 

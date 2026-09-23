@@ -31,6 +31,7 @@ import argparse
 import datetime as dt
 import os
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -51,12 +52,13 @@ STEP_TABLES: dict[str, list[str]] = {
     ],
     "fielding": ["sprint_speed", "oaa", "oaa_team", "catcher"],
     "park": ["park_factors"],
+    "statsapi": ["statsapi_batting", "statsapi_pitching"],
     "statcast": ["statcast_pitches"],
 }
 
 # The steps "all" runs. Mirrors the `if:` conditions in weekly_refresh.yml,
 # which run everything except the heavy statcast pull on "all".
-ALL_STEPS = ["fangraphs", "savant", "fielding", "park"]
+ALL_STEPS = ["fangraphs", "savant", "fielding", "park", "statsapi"]
 
 # Tables whose source refuses this runner. Reported, but they do not fail
 # the job, because nothing this run can do would change it.
@@ -129,6 +131,96 @@ def _row_count(path: Path) -> int | None:
         return None
 
 
+HF_BASE = "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/main/"
+HF_RETRIES = 3
+_sleep = time.sleep  # replaced in tests
+
+# Tables written as one file per season. A narrower run writes fewer files
+# but cannot delete the others on Hugging Face, so no season can vanish.
+PARTITIONED = {"statcast_pitches"}
+
+
+class SeasonCheckError(RuntimeError):
+    """The seasons of a table could not be established."""
+
+
+def _local_seasons(path: Path) -> set[int]:
+    import pyarrow.parquet as pq
+
+    try:
+        col = pq.read_table(path, columns=["season"]).column("season")
+    except Exception as e:  # missing column or unreadable
+        raise SeasonCheckError(f"{path.name}: no readable season column ({e})") from e
+    return {int(v) for v in col.to_pylist() if v is not None}
+
+
+def _published_seasons(table: str) -> set[int] | None:
+    """Seasons in the copy on Hugging Face, or None if there is no copy.
+
+    Only a 404 means "nothing published yet". Any other failure raises: a
+    check that switches itself off when Hugging Face misbehaves would
+    guard nothing on exactly the weeks something is already wrong.
+    """
+    import http.client
+    import io
+    import urllib.error
+    import urllib.request
+
+    import pyarrow.parquet as pq
+
+    # A blip on Hugging Face would otherwise cost that table the week, so
+    # transient failures - 5xx / 429, a dropped connection, a body that
+    # is not the parquet (an error page) - get a few more tries. A 404 or
+    # another 4xx will not change on retry.
+    last: Exception | None = None
+    for attempt in range(HF_RETRIES):
+        if attempt:
+            _sleep(5 * attempt)
+        req = urllib.request.Request(HF_BASE + f"{table}.parquet",
+                                     headers={"User-Agent": "mlb-data-pipeline"})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                return None
+            if e.code != 429 and e.code < 500:
+                raise SeasonCheckError(f"published {table}: HTTP {e.code}") from e
+            last = e
+            continue
+        except (OSError, http.client.HTTPException) as e:
+            last = e
+            continue
+        try:
+            col = pq.read_table(io.BytesIO(data), columns=["season"]).column("season")
+        except Exception as e:
+            last = SeasonCheckError(f"published {table} is not a parquet with a "
+                                    f"season column ({e})")
+            continue
+        return {int(v) for v in col.to_pylist() if v is not None}
+    raise SeasonCheckError(f"published {table}: gave up after {HF_RETRIES} "
+                           f"attempts: {last}")
+
+
+def _lost_seasons(table: str, files: list[Path]) -> list[int]:
+    """Seasons the published copy has and this run's file does not.
+
+    Every table except statcast_pitches is one file, and the upload replaces
+    it whole. A manual run with a narrower --start-year / --end-year would
+    therefore delete every season outside that range from the dataset, and
+    nothing else in this audit would notice: the file exists and has rows.
+    """
+    if table in PARTITIONED:
+        return []
+    local: set[int] = set()
+    for f in files:
+        local |= _local_seasons(f)
+    published = _published_seasons(table)
+    if published is None:
+        return []
+    return sorted(published - local)
+
+
 def _check_declarations() -> list[str]:
     """Problems with this file's own tables, before looking at any data."""
     problems = []
@@ -151,7 +243,18 @@ def main() -> int:
     ap.add_argument("--ok-list",
                     help="write the tables that are fine here, one per line")
     ap.add_argument("--today", help="override the date (tests only)")
+    ap.add_argument(
+        "--allow-lost-seasons", default="",
+        help="comma separated tables that may drop seasons the published "
+             "copy has. For a deliberate, checked run only; every other "
+             "table is still refused.")
     args = ap.parse_args()
+    allow_lost = {t.strip() for t in args.allow_lost_seasons.split(",") if t.strip()}
+    known_tables = {t for tables in STEP_TABLES.values() for t in tables}
+    unknown = sorted(allow_lost - known_tables)
+    if unknown:
+        print(f"ERROR: --allow-lost-seasons names unknown table(s): {', '.join(unknown)}")
+        return 1
 
     today = (dt.date.fromisoformat(args.today) if args.today
              else dt.date.today())
@@ -204,11 +307,29 @@ def main() -> int:
                              f"{len(files)} file(s) written with 0 rows |")
                 continue
 
+            lost_note = ""
+            try:
+                lost = _lost_seasons(table, files)
+            except SeasonCheckError as e:
+                missing.append(table)
+                lines.append(f"| {table} | **UNVERIFIED** | {e} |")
+                continue
+            if lost and table in allow_lost:
+                print(f"WARNING: {table} drops published season(s) "
+                      f"{', '.join(map(str, lost))}; allowed by --allow-lost-seasons")
+                lost_note = f", drops {', '.join(map(str, lost))} (allowed)"
+            elif lost:
+                missing.append(table)
+                lines.append(f"| {table} | **LOST SEASONS** | published copy has "
+                             f"{', '.join(map(str, lost))}, this run does not |")
+                continue
+
             ok.append(table)
             size_mb = sum(f.stat().st_size for f in files) / 1e6
             note = f"{size_mb:.1f} MB"
             if len(files) > 1:
                 note += f", {len(files)} files"
+            note += lost_note
             lines.append(f"| {table} | {rows:,} rows | {note} |")
 
     expired = excused and today > RECHECK_AFTER
@@ -233,7 +354,7 @@ def main() -> int:
                          f"stays as it is: {', '.join(sorted(excused))}. "
                          f"Re-measure by {RECHECK_AFTER.isoformat()}.\n\n")
             if missing:
-                fh.write(f"**Missing, empty or unreadable: "
+                fh.write(f"**Missing, empty or unreadable, or lost seasons: "
                          f"{', '.join(sorted(missing))}** - not uploaded.\n\n")
             if expired:
                 fh.write(f"**The unreachable declaration expired on "
@@ -254,7 +375,7 @@ def main() -> int:
         return 1
 
     if missing:
-        print(f"\nERROR: expected table(s) missing, empty or unreadable: "
+        print(f"\nERROR: expected table(s) missing, empty or unreadable, or lost seasons: "
               f"{', '.join(sorted(missing))}")
         print("Those are not uploaded; the rest of this run still is. "
               "The job fails so the gap is visible instead of silently "
