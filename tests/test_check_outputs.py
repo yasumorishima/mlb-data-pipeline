@@ -424,6 +424,8 @@ def test_published_seasons_404_is_none_and_other_errors_raise():
             raise exc
         return urlopen
     real = urllib.request.urlopen
+    real_sleep = C._sleep
+    C._sleep = lambda s: None
     try:
         urllib.request.urlopen = raising(
             urllib.error.HTTPError("u", 404, "nf", {}, None))
@@ -438,6 +440,7 @@ def test_published_seasons_404_is_none_and_other_errors_raise():
             raise AssertionError(f"{exc!r} did not raise")
     finally:
         urllib.request.urlopen = real
+        C._sleep = real_sleep
 
 
 def test_published_seasons_rejects_a_body_that_is_not_parquet():
@@ -451,6 +454,8 @@ def test_published_seasons_rejects_a_body_that_is_not_parquet():
         def __exit__(self, *a):
             return None
     real = urllib.request.urlopen
+    real_sleep = C._sleep
+    C._sleep = lambda s: None
     try:
         urllib.request.urlopen = lambda req, timeout=None: R(b"<html>busy</html>")
         try:
@@ -460,6 +465,106 @@ def test_published_seasons_rejects_a_body_that_is_not_parquet():
         raise AssertionError("an HTML body was accepted")
     finally:
         urllib.request.urlopen = real
+        C._sleep = real_sleep
+
+
+def _parquet_body(seasons):
+    import io
+    buf = io.BytesIO()
+    pd.DataFrame({"season": list(seasons)}).to_parquet(buf)
+    return buf.getvalue()
+
+
+def _play(outcomes):
+    """urlopen stand-in that plays outcomes in order; counts calls."""
+    import io
+
+    class R(io.BytesIO):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return None
+    state = {"calls": 0}
+
+    def urlopen(req, timeout=None):
+        state["calls"] += 1
+        out = outcomes.pop(0)
+        if isinstance(out, BaseException):
+            raise out
+        return R(out)
+    return urlopen, state
+
+
+def test_published_seasons_retries_a_blip_then_reads():
+    import http.client
+    import urllib.error
+    import urllib.request
+    urlopen, state = _play([urllib.error.HTTPError("u", 502, "x", {}, None),
+                            http.client.IncompleteRead(b""),
+                            _parquet_body([2025, 2026])])
+    real, real_sleep = urllib.request.urlopen, C._sleep
+    urllib.request.urlopen, C._sleep = urlopen, (lambda s: None)
+    try:
+        assert C._published_seasons("park_factors") == {2025, 2026}
+    finally:
+        urllib.request.urlopen, C._sleep = real, real_sleep
+    assert state["calls"] == 3
+
+
+def test_published_seasons_does_not_retry_a_permanent_4xx():
+    import urllib.error
+    import urllib.request
+    urlopen, state = _play([urllib.error.HTTPError("u", 401, "x", {}, None),
+                            _parquet_body([2026])])
+    real, real_sleep = urllib.request.urlopen, C._sleep
+    urllib.request.urlopen, C._sleep = urlopen, (lambda s: None)
+    try:
+        try:
+            C._published_seasons("park_factors")
+        except C.SeasonCheckError:
+            pass
+        else:
+            raise AssertionError("a 401 was read as a copy")
+    finally:
+        urllib.request.urlopen, C._sleep = real, real_sleep
+    assert state["calls"] == 1
+
+
+def test_allow_lost_seasons_lets_only_the_named_table_through():
+    root = _tmp()
+    _populate(root, ["park", "fielding"])  # every file has season 2026 only
+    ok = root / "ok.txt"
+    published = {"park_factors": {2025, 2026}, "oaa": {2025, 2026}}
+    code = _run("park,fielding", root, published=published, ok_list=ok,
+                allow_lost_seasons="park_factors")
+    listed = ok.read_text(encoding="utf-8").split()
+    assert "park_factors" in listed, "the named table was still refused"
+    assert "oaa" not in listed, "a table nobody named was let through"
+    assert code == 1, "oaa still lost a season; the run must stay red"
+
+
+def test_allow_lost_seasons_alone_passes_when_it_is_the_only_problem():
+    root = _tmp()
+    _populate(root, ["park"])
+    code = _run("park", root, published={"park_factors": {2025, 2026}},
+                allow_lost_seasons="park_factors")
+    assert code == 0
+
+
+def test_allow_lost_seasons_rejects_an_unknown_table():
+    root = _tmp()
+    _populate(root, ["park"])
+    assert _run("park", root, allow_lost_seasons="park_factor") == 1
+
+
+def test_the_workflow_passes_allow_lost_seasons_to_the_audit():
+    text = _workflow_text()
+    block = text[text.index("- name: Audit outputs"):][:900]
+    assert "ALLOW_LOST_SEASONS: ${{ inputs.allow_lost_seasons }}" in block, (
+        "the input never reaches the step environment")
+    assert '--allow-lost-seasons "$ALLOW_LOST_SEASONS"' in block, (
+        "the environment value is not what the audit receives")
 
 
 # ------------------------------------------------------- the workflow wiring

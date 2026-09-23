@@ -62,7 +62,7 @@ one.
 | `sc_pitcher_exitvelo.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_batter_expected.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_pitcher_expected.parquet` | Baseball Savant | 2015– | weekly |
-| `sc_pitcher_arsenal.parquet` | Baseball Savant | 2015– | weekly |
+| `sc_pitcher_arsenal.parquet` | Baseball Savant | 2017– | weekly |
 | `sc_batted_ball.parquet` | Baseball Savant | 2015– | weekly |
 | `sc_bat_tracking.parquet` | Baseball Savant | 2024– (Hawk-Eye) | weekly |
 | `sprint_speed.parquet` | Baseball Savant | 2015– | weekly |
@@ -154,9 +154,16 @@ than the copy already published here. A run that checked the ids and
 knows MLB removed a player (e.g. merged a duplicate id) can publish with
 the `allow_statsapi_shrink` workflow input.
 
-For every table in this dataset, the output audit also refuses to publish
-a file that lacks a season the published copy has, so a manual run over a
-narrower year range cannot delete seasons from here.
+For every table except `statcast_pitches` (one file per season, so a
+narrower run cannot remove the others), the output audit also refuses to
+publish a file that lacks a season the published copy has, so a manual
+run over a narrower year range cannot delete seasons from here. A
+deliberate removal has to name the table in the `allow_lost_seasons`
+workflow input.
+
+The weekly run covers seasons up to the latest one in which every club
+has played a game, read from the Stats API standings; before that (and
+through an overseas opening series) it stops at the previous season.
 
 ### Why you can trust the "weekly" column
 

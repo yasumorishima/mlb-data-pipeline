@@ -13,9 +13,10 @@ runner with 403 (run 35565978836, 2026-09-21), so they are frozen at a
 from the runner, and its ``sabermetrics`` stat type carries wOBA, wRAA, wRC,
 wRC+, WAR, FIP and xFIP.
 
-Measured 2026-09-23 against that frozen snapshot, joined on MLBAM id: for
-2015 / 2019 / 2020 the two agree to rounding (wOBA max |diff| 0.0021, wRC+
-0.50 - FanGraphs stores integers - WAR 0.05-0.15, FIP / xFIP 0.005). For 2025
+Measured 2026-09-23 against that frozen snapshot, joined on MLBAM id (every
+FanGraphs row matched): for 2015-2021 the two agree to rounding (wOBA max
+|diff| 0.002, wRC+ 0.50 - FanGraphs stores integers - WAR 0.2, FIP / xFIP
+0.005). For 2025
 wOBA / wRAA still agree but wRC+ differs by up to 5.6 with the difference
 lined up by club (ATH +5.06, CIN -3.05): park factors revised after the
 snapshot. So past seasons can change and every run refetches all of them.
@@ -58,6 +59,7 @@ API = "https://statsapi.mlb.com/api/v1/stats"
 HF_BASE = "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/main/"
 USER_AGENT = "mlb-data-pipeline (+https://github.com/yasumorishima/mlb-data-pipeline)"
 LIMIT = 5000
+HF_RETRIES = 3
 BUDGET_MIN = 10
 
 # Kept as its own flat map so tests/test_check_outputs.py, which reads the
@@ -110,10 +112,11 @@ def _get(url: str, retries: int = 3) -> dict:
     """GET and decode JSON, retrying only what a retry can fix.
 
     Transient: 5xx / 429, a dropped or reset connection, a truncated body,
-    a timeout, and a body that is not JSON (an error page from a proxy).
-    Of those, only URLError is wrapped by urllib; RemoteDisconnected,
-    ConnectionResetError and IncompleteRead arrive bare. Any other 4xx is
-    permanent and fails at once. Whatever gives up raises FetchError.
+    a timeout, a TLS error mid-read, and a body that is not JSON (an error
+    page from a proxy). urllib wraps only some of these in URLError;
+    RemoteDisconnected, ConnectionResetError and IncompleteRead arrive
+    bare. Any other 4xx is permanent and fails at once. Giving up raises
+    FetchError; anything outside these classes is a bug and propagates.
     """
     last: Exception | None = None
     for attempt in range(retries):
@@ -125,8 +128,9 @@ def _get(url: str, retries: int = 3) -> dict:
             if e.code != 429 and e.code < 500:
                 raise FetchError(f"{url}: HTTP {e.code}") from e
             last = e
-        except (urllib.error.URLError, http.client.HTTPException,
-                ConnectionError, TimeoutError, json.JSONDecodeError) as e:
+        except (OSError, http.client.HTTPException, json.JSONDecodeError) as e:
+            # OSError covers URLError, ConnectionError, TimeoutError and an
+            # ssl.SSLError raised while reading the body.
             last = e
         if attempt + 1 < retries:
             time.sleep(2 * (attempt + 1))
@@ -295,24 +299,36 @@ def _published(table: str) -> pd.DataFrame | None:
     Only a 404 means "nothing published yet". Any other failure raises: if
     the comparison could quietly switch itself off on a network error, it
     would guard nothing on exactly the weeks something else is going wrong.
+    Transient failures are retried the way `_get` retries them, so one
+    blip on Hugging Face does not cost both tables the week.
     """
-    req = urllib.request.Request(HF_BASE + f"{table}.parquet",
-                                 headers={"User-Agent": USER_AGENT})
-    try:
-        with urllib.request.urlopen(req, timeout=120) as resp:
-            data = resp.read()
-    except urllib.error.HTTPError as e:
-        if e.code == 404:
-            print(f"  {table} is not published yet - nothing to compare with")
-            return None
-        raise FetchError(f"reading the published {table}: HTTP {e.code}") from e
-    except (urllib.error.URLError, TimeoutError) as e:
-        raise FetchError(f"reading the published {table}: {e}") from e
-    try:
-        return pd.read_parquet(io.BytesIO(data), columns=["season"])
-    except Exception as e:  # an HTML error page, a truncated body
-        raise FetchError(f"the published {table} is not a parquet with a "
-                         f"season column ({type(e).__name__}: {e})") from e
+    last: Exception | None = None
+    for attempt in range(HF_RETRIES):
+        if attempt:
+            time.sleep(5 * attempt)
+        req = urllib.request.Request(HF_BASE + f"{table}.parquet",
+                                     headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                data = resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 404:
+                print(f"  {table} is not published yet - nothing to compare with")
+                return None
+            if e.code != 429 and e.code < 500:
+                raise FetchError(f"reading the published {table}: HTTP {e.code}") from e
+            last = e
+            continue
+        except (OSError, http.client.HTTPException) as e:
+            last = e
+            continue
+        try:
+            return pd.read_parquet(io.BytesIO(data), columns=["season"])
+        except Exception as e:  # an HTML error page, a truncated body
+            last = FetchError(f"the published {table} is not a parquet with a "
+                              f"season column ({type(e).__name__}: {e})")
+    raise FetchError(f"reading the published {table}: gave up after "
+                     f"{HF_RETRIES} attempts: {last}")
 
 
 def _today() -> dt.date:

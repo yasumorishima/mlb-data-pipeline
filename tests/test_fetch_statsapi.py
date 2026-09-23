@@ -324,19 +324,19 @@ def _urlopen_raising(exc):
 
 def test_published_404_means_nothing_published():
     err = urllib.error.HTTPError("u", 404, "Not Found", {}, None)
-    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err))}):
+    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err)), "F__time": _NoSleep()}):
         assert F._published("statsapi_batting") is None
 
 
 def test_published_other_http_error_fails_rather_than_skipping_the_check():
     err = urllib.error.HTTPError("u", 503, "Unavailable", {}, None)
-    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err))}):
+    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err)), "F__time": _NoSleep()}):
         _expect_fetch_error(F._published, "statsapi_batting", contains="503")
 
 
 def test_published_network_error_fails_rather_than_skipping_the_check():
     err = urllib.error.URLError("down")
-    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err))}):
+    with _Patched(**{"F__urllib": _FakeUrllib(_urlopen_raising(err)), "F__time": _NoSleep()}):
         _expect_fetch_error(F._published, "statsapi_batting", contains="down")
 
 
@@ -344,7 +344,7 @@ def test_published_reads_the_season_column():
     buf = io.BytesIO()
     pd.DataFrame({"season": [2024, 2025], "x": [1, 2]}).to_parquet(buf)
     data = buf.getvalue()
-    with _Patched(**{"F__urllib": _FakeUrllib(lambda req, timeout=None: _Resp(data))}):
+    with _Patched(**{"F__urllib": _FakeUrllib(lambda req, timeout=None: _Resp(data)), "F__time": _NoSleep()}):
         out = F._published("statsapi_batting")
     assert list(out.columns) == ["season"] and list(out["season"]) == [2024, 2025]
 
@@ -545,16 +545,21 @@ def test_no_step_hardcodes_the_end_year():
     # moved on, with the job still green.
     import re
     text = WORKFLOW.read_text(encoding="utf-8")
-    for line in text.splitlines():
-        if "--end-year" in line:
-            assert "steps.steps.outputs.end_year" in line, line
-            assert not re.search(r"'20\d\d'", line), line
-    block = _step_block("Determine steps")
-    assert "regularSeasonStartDate" in block, "the default ignores opening day"
-    assert "end_year=" in block
+    fetch_lines = [l for l in text.splitlines()
+                   if "--end-year" in l or "--years" in l]
+    assert len(fetch_lines) >= 6, fetch_lines
+    for line in fetch_lines:
+        assert "steps.steps.outputs.end_year" in line, line
+        assert "inputs.end_year" not in line, line
+        assert not re.search(r"end_year\s*\|\|\s*'20\d\d'", line), line
+    # The input is read in exactly one place: the step that validates it.
+    uses = [l for l in text.splitlines() if "inputs.end_year" in l]
+    assert len(uses) == 1 and "END_YEAR_INPUT" in uses[0], uses
+    assert "end_year=" in _step_block("Determine steps")
 
 
-def _run_determine_steps(today: str, curl_body: str | None, end_input: str = ""):
+def _run_determine_steps(today: str, curl_body: str | None, end_input: str = "",
+                         check_url: bool = False):
     """Execute the real `Determine steps` script with curl and date stubbed.
 
     Returns (exit code, the lines it wrote to GITHUB_OUTPUT).
@@ -577,7 +582,11 @@ def _run_determine_steps(today: str, curl_body: str | None, end_input: str = "")
     if curl_body is None:
         curl = "#!/bin/bash\necho 'curl: (22) 404' >&2\nexit 22\n"
     else:
-        curl = "#!/bin/bash\ncat <<'JSON'\n" + curl_body + "\nJSON\n"
+        guard = ""
+        if check_url:
+            guard = (f'case "$*" in *season={year}*date={today}*) ;; '
+                     '*) echo "unexpected url: $*" >&2; exit 3;; esac\n')
+        curl = "#!/bin/bash\n" + guard + "cat <<'JSON'\n" + curl_body + "\nJSON\n"
     (stubs / "curl").write_text(curl, encoding="utf-8")
     for f in stubs.iterdir():
         f.chmod(0o755)
@@ -591,32 +600,58 @@ def _run_determine_steps(today: str, curl_body: str | None, end_input: str = "")
     return proc.returncode, out.read_text(encoding="utf-8").split()
 
 
-_SEASON_2027 = '{"seasons":[{"seasonId":"2027","regularSeasonStartDate":"2027-03-25"}]}'
+def _standings(games_per_club: list[int]) -> str:
+    """Standings JSON shaped like /api/v1/standings (6 division records)."""
+    import json
+    clubs = [{"team": {"id": 100 + i}, "wins": g // 2, "losses": g - g // 2}
+             for i, g in enumerate(games_per_club)]
+    records = [{"teamRecords": clubs[i:i + 5]} for i in range(0, len(clubs), 5)]
+    return json.dumps({"records": records})
 
 
-def test_before_opening_day_the_end_year_is_last_season():
-    code, out = _run_determine_steps("2027-01-10", _SEASON_2027)
+_PRESEASON = '{"records": []}'
+_TOKYO_ONLY = _standings([2, 2] + [0] * 28)   # 2025-03-24: 2 of 30 had played
+_EVERYONE = _standings([1] * 30)              # 2025-03-28: all 30 had played
+
+
+def test_before_the_season_the_end_year_is_last_season():
+    code, out = _run_determine_steps("2027-01-10", _PRESEASON)
     assert code == 0 and "end_year=2026" in out, (code, out)
-    code, out = _run_determine_steps("2027-03-24", _SEASON_2027)
+
+
+def test_an_overseas_opener_does_not_start_the_season():
+    # regularSeasonStartDate for 2025 was the Tokyo opener, 2025-03-18.
+    code, out = _run_determine_steps("2027-03-24", _TOKYO_ONLY)
     assert code == 0 and "end_year=2026" in out, (code, out)
 
 
-def test_from_opening_day_the_end_year_is_this_season():
-    code, out = _run_determine_steps("2027-03-25", _SEASON_2027)
+def test_once_every_club_has_played_the_end_year_is_this_season():
+    code, out = _run_determine_steps("2027-03-28", _EVERYONE)
     assert code == 0 and "end_year=2027" in out, (code, out)
 
 
-def test_an_unreadable_opening_day_stops_the_run():
-    code, out = _run_determine_steps("2027-05-01", None)
-    assert code != 0 and not any(o.startswith("end_year=") for o in out), (code, out)
-    code, out = _run_determine_steps("2027-05-01", '{"seasons":[]}')
-    assert code != 0 and not any(o.startswith("end_year=") for o in out), (code, out)
+def test_unreadable_standings_stop_the_run():
+    for body in (None, "<html>busy</html>", "{}"):
+        code, out = _run_determine_steps("2027-05-01", body)
+        assert code != 0 and not any(o.startswith("end_year=") for o in out), (
+            body, code, out)
+
+
+def test_the_standings_request_names_this_season_and_today():
+    # The stub refuses any URL without season=<year> and date=<today>.
+    code, out = _run_determine_steps("2027-05-01", _EVERYONE, check_url=True)
+    assert code == 0 and "end_year=2027" in out, (code, out)
+
+
+def test_the_standings_request_retries():
+    assert "--retry" in _step_block("Determine steps"), (
+        "one Stats API blip would cost every table the week")
 
 
 def test_an_explicit_end_year_wins_and_must_be_a_year():
     code, out = _run_determine_steps("2027-01-10", None, end_input="2024")
     assert code == 0 and "end_year=2024" in out, (code, out)
-    code, out = _run_determine_steps("2027-01-10", _SEASON_2027, end_input="abc")
+    code, out = _run_determine_steps("2027-01-10", _EVERYONE, end_input="abc")
     assert code != 0, (code, out)
 
 
@@ -685,8 +720,37 @@ def test_get_gives_up_with_a_fetch_error():
 
 def test_published_html_body_is_a_fetch_error():
     with _Patched(**{"F__urllib": _FakeUrllib(
-            lambda req, timeout=None: _Resp(b"<html>rate limited</html>"))}):
+            lambda req, timeout=None: _Resp(b"<html>rate limited</html>")),
+            "F__time": _NoSleep()}):
         _expect_fetch_error(F._published, "statsapi_batting", contains="not a parquet")
+
+
+def _parquet_bytes():
+    buf = io.BytesIO()
+    pd.DataFrame({"season": [2024, 2025]}).to_parquet(buf)
+    return buf.getvalue()
+
+
+def test_published_retries_transient_failures_then_reads():
+    import http.client
+    seq = _Seq([urllib.error.HTTPError("u", 503, "x", {}, None),
+                http.client.RemoteDisconnected("gone"), _parquet_bytes()])
+    with _Patched(F__urllib=_FakeUrllib(seq), F__time=_NoSleep()):
+        out = F._published("statsapi_batting")
+    assert list(out["season"]) == [2024, 2025] and seq.calls == 3
+
+
+def test_published_does_not_retry_a_permanent_4xx():
+    seq = _Seq([urllib.error.HTTPError("u", 403, "x", {}, None), _parquet_bytes()])
+    with _Patched(F__urllib=_FakeUrllib(seq), F__time=_NoSleep()):
+        _expect_fetch_error(F._published, "statsapi_batting", contains="403")
+    assert seq.calls == 1
+
+
+def test_get_retries_a_tls_error_mid_read():
+    import ssl
+    out, calls = _get_with([ssl.SSLError("bad record mac"), b'{"ok": 5}'])
+    assert out == {"ok": 5} and calls == 2
 
 
 # ------------------------------------------------ season boundary, escape hatch
