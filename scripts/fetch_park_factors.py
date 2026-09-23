@@ -4,6 +4,19 @@ Fetch park factors from Baseball Savant via savant-extras.
 Table produced:
   mlb_shared.park_factors
 
+Until savant-extras 0.5.0 this said "Baseball Savant" while the package
+actually scraped FanGraphs Guts!, which now answers plain HTTP clients
+with a Cloudflare challenge (403) from GitHub runners and a residential
+line alike. Every season failed, the step was continue-on-error, and the
+table never reached the dataset at all. 0.5.0 reads the Statcast park
+factor leaderboard, so this step is expected to succeed and no longer
+gets to fail quietly.
+
+Columns changed with the source: pf_5yr and pf_fip are gone (Savant
+publishes 1-year and 3-year windows, and no FIP factor), pf_1yr and
+pf_3yr carry the runs factor, and venue_id / venue_name / n_pa_* / the
+wOBA-family indices are new.
+
 Usage:
   python scripts/fetch_park_factors.py
   python scripts/fetch_park_factors.py --no-bq
@@ -45,7 +58,12 @@ def fetch_park_factors(start=START_SEASON, end=END_SEASON) -> pd.DataFrame:
     df = park_factors_range(start, end)
     out = DATA_DIR / "park_factors.csv"
     df.to_csv(out, index=False)
-    print(f"Saved: {out} ({len(df)} rows, {df['season'].min()}-{df['season'].max()})")
+    # A frame with no columns at all - what an all-seasons failure
+    # returns - would raise KeyError on df["season"] here, before the
+    # explanation written for that case in main() ever prints.
+    span = (f"{df['season'].min()}-{df['season'].max()}"
+            if "season" in df.columns and len(df) else "no seasons")
+    print(f"Saved: {out} ({len(df)} rows, {span})")
     return df
 
 
@@ -60,12 +78,28 @@ def main():
     df = fetch_park_factors(args.start_year, args.end_year)
     _log_elapsed("park_factors fetch", t0)
 
-    if len(df) > 0:
-        validate_dataframe(df, "park_factors",
-                           expected_years=(args.start_year, args.end_year),
-                           required_cols=["season", "team", "pf_5yr", "pf_hr"])
+    # An empty frame used to fall through both guards and exit 0, which is
+    # how park_factors went missing from the dataset without the job ever
+    # going red. Savant is reachable from the runner, so nothing here is
+    # an expected empty.
+    if len(df) == 0:
+        print("ERROR: park_factors fetched 0 rows. Writing nothing would "
+              "leave the previous copy in place and still exit 0.")
+        raise SystemExit(1)
 
-    if not args.no_bq and len(df) > 0:
+    # validate_dataframe returns a bool and prints its verdict. Calling
+    # it bare - which every fetch script used to do - means a frame
+    # missing a required column, or missing half the seasons asked for,
+    # writes its parquet and exits 0.
+    ok = validate_dataframe(df, "park_factors",
+                            expected_years=(args.start_year, args.end_year),
+                            required_cols=["season", "team", "pf_1yr", "pf_3yr"])
+    if not ok:
+        print("ERROR: park_factors failed validation (see the warnings "
+              "above). Refusing to publish it over the previous copy.")
+        raise SystemExit(1)
+
+    if not args.no_bq:
         write_dataframe(df, "park_factors")
         if DATA_TARGET == "bq":
             validate_bq_table("park_factors")

@@ -30,10 +30,20 @@ on:
 # Hugging Face dataset yasumorishima/mlb-stats (BigQuery retired 2026-04-19,
 # RPi5 SSD retired 2026-05-29 -> HF is the canonical store). No GCP needed.
 #
-# Known limitation: FanGraphs (fg_* tables + park_factors) returns 403 from
-# datacenter IPs (GHA / RPi5 both blocked, verified 2026-06-10 run 27280519531
-# and 27282419304). Those steps are continue-on-error so the Savant tables
-# still refresh weekly; fg_* on HF remain the 2026-04 rescued snapshot.
+# Known limitation: the FanGraphs tables (fg_batting / fg_pitching /
+# fg_pitcher_plus) return 403 from this runner. That step is
+# continue-on-error so the Savant tables still refresh weekly; the fg_*
+# files on HF remain the 2026-04 rescued snapshot, which ends with the
+# 2025 season. scripts/check_outputs.py reports them every run and the
+# exemption expires, so this cannot quietly become permanent.
+#
+# The cause is the address, not the client: pybaseball sets no
+# User-Agent, so it sends the honest python-requests default, and it
+# still got 403 for all 12 seasons on run 35565978836 (2026-09-21). The
+# same request from a residential line returns 200 (measured
+# 2026-09-23). park_factors is no longer a FanGraphs table - it moved to
+# Baseball Savant in savant-extras 0.5.0 - so it refreshes weekly like
+# the rest and its step is not excused.
 permissions:
   contents: read
   actions: write
@@ -100,12 +110,13 @@ jobs:
             --end-year ${{ inputs.end_year || '2026' }}
 
       # ================================================================
-      # Park factors
-      # continue-on-error: source is fangraphs.com/guts.aspx -> same 403
+      # Park factors (Baseball Savant statcast-park-factors)
+      # Not continue-on-error: savant-extras 0.5.0 moved this off
+      # FanGraphs, so a failure here is a real failure. While it was
+      # excused, park_factors never reached the dataset at all.
       # ================================================================
       - name: Fetch park factors
         if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
-        continue-on-error: true
         working-directory: scripts
         run: |
           python fetch_park_factors.py \
@@ -132,31 +143,92 @@ jobs:
           find data/parquet_out -name '*.parquet' -printf '%10s  %p\n' 2>/dev/null || true
 
       # ================================================================
+      # Did every table this run asked for actually arrive?
+      #
+      # The upload step pushes whatever files exist, so a table that
+      # fetched nothing is simply skipped and Hugging Face keeps the old
+      # copy - green job, silently stale table. This step says what was
+      # produced and fails when an expected table is missing or empty.
+      # Its own tests run first so a broken check cannot pass by being
+      # broken.
+      # ================================================================
+      - name: Test the output audit
+        id: audit_tests
+        if: always()
+        run: python tests/test_check_outputs.py
+
+      - name: Audit outputs
+        id: audit
+        if: always()
+        # continue-on-error so the tables that ARE fine still get
+        # uploaded; the last step in the job turns the run red.
+        continue-on-error: true
+        run: |
+          python scripts/check_outputs.py \
+            --steps "${{ steps.steps.outputs.steps }}" \
+            --ok-list ok_tables.txt
+
+      # ================================================================
       # Upload to Hugging Face (public dataset, flattened to root to
       # match existing layout: <table>/<table>.parquet -> <table>.parquet)
       # ================================================================
+      # A step with no `if:` carries the implicit success(), so a failed
+      # fetch step would skip both uploads and cost the week for every
+      # table that did arrive. Publish whenever the audit actually ran
+      # and its own tests passed; a broken gate still blocks publishing.
       - name: Install huggingface_hub
+        if: >-
+          !cancelled()
+          && steps.audit_tests.outcome == 'success'
+          && steps.audit.outcome != 'skipped'
         run: pip install --quiet "huggingface_hub>=0.26"
 
       - name: Upload to Hugging Face
+        if: >-
+          !cancelled()
+          && steps.audit_tests.outcome == 'success'
+          && steps.audit.outcome != 'skipped'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
           shopt -s nullglob
+          # Only the tables the audit passed. Uploading a table it
+          # rejected would overwrite a good copy on Hugging Face with an
+          # empty or truncated one.
+          if [ ! -f ok_tables.txt ]; then
+            echo "ok_tables.txt is missing — the audit step did not run"
+            exit 1
+          fi
           count=0
-          for f in data/parquet_out/*/*.parquet; do
-            base="$(basename "$f")"
-            echo "Uploading $f -> $base"
-            hf upload yasumorishima/mlb-stats "$f" "$base" \
-              --repo-type dataset \
-              --commit-message "Weekly refresh: $base"
-            count=$((count + 1))
-          done
+          while read -r table; do
+            [ -n "$table" ] || continue
+            for f in data/parquet_out/"$table"/"$table"*.parquet; do
+              base="$(basename "$f")"
+              echo "Uploading $f -> $base"
+              hf upload yasumorishima/mlb-stats "$f" "$base" \
+                --repo-type dataset \
+                --commit-message "Weekly refresh: $base"
+              count=$((count + 1))
+            done
+          done < ok_tables.txt
           echo "Uploaded $count parquet file(s) to yasumorishima/mlb-stats"
           if [ "$count" -eq 0 ]; then
             echo "No parquet files produced — failing so the issue is visible"
             exit 1
           fi
+
+      # ================================================================
+      # The audit ran with continue-on-error so the healthy tables could
+      # still be published. Turn the run red here, after the upload, so
+      # a single missing table costs visibility and not the whole week.
+      # ================================================================
+      - name: Fail if the audit found a problem
+        if: always() && steps.audit.outcome == 'failure'
+        run: |
+          echo "The output audit reported a missing, empty or unreadable table."
+          echo "See the job summary. The tables that were fine have been"
+          echo "uploaded; this run is red so the gap is visible."
+          exit 1
 
       # ================================================================
       # Discord notification

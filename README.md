@@ -4,7 +4,21 @@
 
 > **Status (2026-06-10):** 実行基盤は **GitHub Actions（ubuntu-latest, 週次）**、データ正本は **Hugging Face Dataset [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats)**。BigQuery は 2026-04-19 退役、RPi5 SSD は 2026-05-29 廃止（経緯は Migration History 参照）。
 
-> **Known limitation:** FanGraphs 由来テーブル（`fg_*` + `park_factors`）は datacenter IP からの 403 ブロックにより GHA から取得不可（2026-06-10 検証）。週次 refresh で自動更新されるのは **Savant 系テーブルのみ**で、`fg_*` / `park_factors` は HF 上の 2026-04 救出スナップショットを静的保持。
+> **Known limitation:** FanGraphs 由来の `fg_batting` / `fg_pitching` / `fg_pitcher_plus` は取得できず、
+> HF 上は **2026-04 救出スナップショット（2025 シーズンまで）の静的保持**。
+> 🔴 **遮断は 2 層あり、runner に効いているのはアドレスの方**＝pybaseball は User-Agent を一切設定せず
+> 正直な既定値を送るのに、run `35565978836`（2026-09-21）で 12 シーズン全部 403。
+> 一方**ブラウザを詐称した UA はどこからでも** 403 + `cf-mitigated: challenge` を返し、
+> `python-requests` / `curl` / UA 無しなら住宅回線から **200**（2026-09-23 実測）。
+> ⇒ 旧記述の「datacenter IP」は runner については正しく、UA の層とは別物。
+`park_factors` は **2026-09-23 に Baseball Savant へ移して週次更新に復帰**
+> （savant-extras 0.5.0）。それ以前は「Savant 由来」と書きながら実体が FanGraphs Guts! で、
+> **HF に一度も存在しなかった**（週次ジョブは緑のまま）＝復帰ではなく**新規投入**。
+>
+> 🔴 **毎回 `scripts/check_outputs.py` がテーブルごとの行数を job summary に出し、
+> 期待したテーブルが欠けていれば run を赤にする。** 欠けたテーブルは upload されず、
+> HF 上の前回のコピーがそのまま残る（緑のまま古くなるのを防ぐのが目的）。
+> `fg_*` の免除は `RECHECK_AFTER` で期限切れになり、その後は再測定するまで落ちる。
 
 ## Architecture
 
@@ -38,15 +52,15 @@ Automation: .github/workflows/weekly_refresh.yml
 | `oaa` | Savant | 2,428 | Outs Above Average by position (2016+) |
 | `oaa_team` | Savant | 270 | Team-level OAA aggregate |
 | `catcher` | Savant | 702 | Pop time + framing (2015+) |
-| `park_factors` | Savant | 329 | Stadium park factors (2015-2025) |
+| `park_factors` | Savant | 360 | Ballpark factors, 1yr + 3yr windows (2015-2026, 12 × 30) |
 | `statcast_pitches` | Savant | 6.8M+ | Full pitch-level data (2015-2025, 122 cols) |
 
 Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `statcast_pitches_2025.parquet`); all other tables are single files. HF 上ではテーブル名のファイルがルート直下に置かれる（例: `fg_batting.parquet`）。
 
 | 更新区分 | テーブル |
 |---|---|
-| 週次自動更新（Savant） | `sc_*`, `sprint_speed`, `oaa`, `oaa_team`, `catcher` |
-| 静的（FanGraphs 403、2026-04 スナップショット） | `fg_batting`, `fg_pitching`, `fg_pitcher_plus`, `park_factors` |
+| 週次自動更新（Savant） | `sc_*`, `sprint_speed`, `oaa`, `oaa_team`, `catcher`, `park_factors` |
+| 静的（FanGraphs Cloudflare チャレンジ、2026-04 スナップショット） | `fg_batting`, `fg_pitching`, `fg_pitcher_plus` |
 | 手動 dispatch のみ（重量） | `statcast_pitches` |
 
 ## Consumers
