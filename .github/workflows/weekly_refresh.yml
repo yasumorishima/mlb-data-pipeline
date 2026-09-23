@@ -153,6 +153,7 @@ jobs:
       # broken.
       # ================================================================
       - name: Test the output audit
+        id: audit_tests
         if: always()
         run: python tests/test_check_outputs.py
 
@@ -171,10 +172,22 @@ jobs:
       # Upload to Hugging Face (public dataset, flattened to root to
       # match existing layout: <table>/<table>.parquet -> <table>.parquet)
       # ================================================================
+      # A step with no `if:` carries the implicit success(), so a failed
+      # fetch step would skip both uploads and cost the week for every
+      # table that did arrive. Publish whenever the audit actually ran
+      # and its own tests passed; a broken gate still blocks publishing.
       - name: Install huggingface_hub
+        if: >-
+          !cancelled()
+          && steps.audit_tests.outcome == 'success'
+          && steps.audit.outcome != 'skipped'
         run: pip install --quiet "huggingface_hub>=0.26"
 
       - name: Upload to Hugging Face
+        if: >-
+          !cancelled()
+          && steps.audit_tests.outcome == 'success'
+          && steps.audit.outcome != 'skipped'
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |

@@ -5,9 +5,13 @@
 > **Status (2026-06-10):** 実行基盤は **GitHub Actions（ubuntu-latest, 週次）**、データ正本は **Hugging Face Dataset [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats)**。BigQuery は 2026-04-19 退役、RPi5 SSD は 2026-05-29 廃止（経緯は Migration History 参照）。
 
 > **Known limitation:** FanGraphs 由来の `fg_batting` / `fg_pitching` / `fg_pitcher_plus` は取得できず、
-> HF 上は **2026-04 救出スナップショット（2025 シーズンまで）の静的保持**。原因は datacenter IP のブロックではなく
-> **Cloudflare のチャレンジ**で、GHA からも住宅回線（RPi5）からも同じく 403 + `cf-mitigated: challenge` が返る
-> （2026-09-23 実測）。`park_factors` は **2026-09-23 に Baseball Savant へ移して週次更新に復帰**
+> HF 上は **2026-04 救出スナップショット（2025 シーズンまで）の静的保持**。
+> 🔴 **遮断は 2 層あり、runner に効いているのはアドレスの方**＝pybaseball は User-Agent を一切設定せず
+> 正直な既定値を送るのに、run `35565978836`（2026-09-21）で 12 シーズン全部 403。
+> 一方**ブラウザを詐称した UA はどこからでも** 403 + `cf-mitigated: challenge` を返し、
+> `python-requests` / `curl` / UA 無しなら住宅回線から **200**（2026-09-23 実測）。
+> ⇒ 旧記述の「datacenter IP」は runner については正しく、UA の層とは別物。
+`park_factors` は **2026-09-23 に Baseball Savant へ移して週次更新に復帰**
 > （savant-extras 0.5.0）。それ以前は「Savant 由来」と書きながら実体が FanGraphs Guts! で、
 > **HF に一度も存在しなかった**（週次ジョブは緑のまま）＝復帰ではなく**新規投入**。
 >

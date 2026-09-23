@@ -373,10 +373,39 @@ def test_the_upload_uses_the_ok_list():
         "guard above the loop is not the same thing")
 
 
-def test_a_failed_audit_still_fails_the_job():
+def test_the_upload_survives_a_failed_fetch_step():
+    """A step with no `if:` carries the implicit success().
+
+    So a fetch step exiting non-zero - which park factors now can, it is no
+    longer continue-on-error - would skip both upload steps and cost the
+    week for every table that did arrive. That is the trade this gate
+    exists to avoid.
+    """
     text = _workflow_text()
-    assert "steps.audit.outcome" in text, (
-        "the audit is continue-on-error; something must still fail the job")
+    for step in ("Install huggingface_hub", "Upload to Hugging Face"):
+        block = text[text.index("- name: " + step):][:500]
+        assert "if:" in block, step + " carries the implicit success()"
+        assert "steps.audit.outcome" in block, step + " does not consult the audit"
+
+
+def test_a_broken_gate_blocks_publishing():
+    text = _workflow_text()
+    for step in ("Install huggingface_hub", "Upload to Hugging Face"):
+        block = text[text.index("- name: " + step):][:500]
+        assert "steps.audit_tests.outcome == " in block, (
+            step + " would publish even when the gate own tests fail")
+
+
+def test_a_failed_audit_still_fails_the_job():
+    # Scoped to the step that does it: steps.audit.outcome also appears in
+    # the upload conditions now, so a bare "in text" would pass with this
+    # step gutted.
+    text = _workflow_text()
+    block = text[text.index("- name: Fail if the audit found a problem"):][:400]
+    assert "steps.audit.outcome == " in block, (
+        "the audit is continue-on-error; this step must still fail the job")
+    assert "failure" in block
+    assert "if: false" not in block
 
 
 def test_the_park_step_is_not_excused():
