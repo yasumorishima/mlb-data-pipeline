@@ -1,0 +1,8 @@
+mlb_marts:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var(\"MLB_MARTS_DB\", \"target/mlb.duckdb\") }}"
+      extensions: [httpfs, parquet]
+      threads: 2

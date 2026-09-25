@@ -1,0 +1,30 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      Parquet files published by this repo to the Hugging Face dataset
+      yasumorishima/mlb-stats (one file per table, all seasons in one file).
+    meta:
+      external_location: "{{ var(\"raw_base\") }}/{name}.parquet"
+    tables:
+      - name: statsapi_batting
+        description: MLB Stats API season hitting + sabermetrics, one row per player-season.
+      - name: statsapi_pitching
+        description: MLB Stats API season pitching, one row per player-season.
+      - name: sc_batter_expected
+        description: Baseball Savant expected stats (xBA/xSLG/xwOBA) for batters.
+      - name: sc_pitcher_expected
+        description: Baseball Savant expected stats allowed, with xERA.
+      - name: sc_batted_ball
+        description: Savant batted-ball profile (GB/FB/LD/PU, pull/straight/oppo).
+      - name: sc_bat_tracking
+        description: Savant bat tracking (bat speed, swing tilt, attack angle); 2024 onward.
+      - name: sprint_speed
+        description: Savant sprint speed.
+      - name: oaa
+        description: Savant Outs Above Average, one row per player-season-position.
+      - name: sc_pitcher_arsenal
+        description: Savant pitch-arsenal run values, one row per pitcher-season-pitch type.
+      - name: park_factors
+        description: Savant Statcast park factors, one row per team-season.

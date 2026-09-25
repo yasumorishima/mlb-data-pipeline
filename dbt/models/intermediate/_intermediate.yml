@@ -1,0 +1,11 @@
+version: 2
+
+models:
+  - name: int_league_pitching_season
+    description: League totals and the FIP constant, one row per season.
+    columns:
+      - name: season
+        data_tests: [unique, not_null]
+      - name: fip_constant
+        description: FanGraphs-style cFIP; historically about 3.0 to 3.3.
+        data_tests: [not_null, {in_range: {arguments: {min_value: 2.5, max_value: 4.0}}}]

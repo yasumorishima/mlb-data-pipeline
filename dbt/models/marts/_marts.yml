@@ -1,0 +1,71 @@
+version: 2
+
+models:
+  - name: mart_batter_season
+    description: >
+      One row per batter-season with PA > 0. Outcome stats from the MLB Stats
+      API next to Statcast process stats (xwOBA, batted-ball mix, bat speed,
+      sprint speed, OAA summed over positions).
+    data_tests:
+      - unique_combination: {arguments: {columns: [player_id, season]}}
+    columns:
+      - name: player_id
+        data_tests: [not_null]
+      - name: season
+        data_tests: [not_null]
+      - name: pa
+        data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 800}}}]
+      - name: age
+        data_tests: [not_null, {in_range: {arguments: {min_value: 17, max_value: 50}}}]
+      - name: k_rate
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: bb_rate
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: woba
+        description: A home run in the only PA is wOBA ~2, so the bound is loose.
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 2.5}}}]
+      - name: woba_minus_xwoba
+        description: Positive = results ran ahead of contact quality.
+      - name: sprint_speed
+        data_tests: [{in_range: {arguments: {min_value: 15, max_value: 35}}}]
+
+  - name: mart_pitcher_season
+    description: >
+      One row per pitcher-season. FIP is rebuilt from the table itself with a
+      per-season league constant (int_league_pitching_season).
+    data_tests:
+      - unique_combination: {arguments: {columns: [player_id, season]}}
+    columns:
+      - name: player_id
+        data_tests: [not_null]
+      - name: k_rate
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: bb_rate
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: n_pitch_types_5pct
+        description: Pitch types thrown at least 5% of the time (Savant arsenal, 2017+).
+
+  - name: mart_batter_aging_pairs
+    description: >
+      Consecutive-season pairs for the same batter; the input for aging and
+      development curves. pair_weight is the harmonic mean of the two PAs.
+    data_tests:
+      - unique_combination: {arguments: {columns: [player_id, season_1]}}
+    columns:
+      - name: pair_weight
+        data_tests: [not_null]
+
+  - name: mart_pitch_arsenal_scouting
+    description: >
+      Pitcher-season-pitch rows with usage rank and within-type percentiles
+      (pitches >= 100 only; NULL below that).
+    data_tests:
+      - unique_combination: {arguments: {columns: [player_id, season, pitch_type]}}
+    columns:
+      - name: usage
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: whiff_rate
+        description: Savant publishes 0-100; staging divides by 100.
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: hard_hit_rate
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
