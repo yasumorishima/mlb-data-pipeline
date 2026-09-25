@@ -78,6 +78,7 @@ Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `stat
 |---------|--------|-------------|
 | [baseball-mlops](https://github.com/yasumorishima/baseball-mlops) | Weekly Retrain 停止中 | fg_batting, fg_pitching, sc_*, sprint_speed, park_factors |
 | [mlb-win-probability](https://github.com/yasumorishima/mlb-win-probability) | Cloud Run 削除済 | statcast_pitches, fg_batting, fg_pitching, sprint_speed, oaa_team, catcher, park_factors |
+| [dbt marts](dbt/) | 稼働中（CI で毎週 build） | statsapi_*, sc_*, sprint_speed, oaa → 分析用マート 4 本（選手評価・年齢曲線入力・球種スカウティング） |
 
 読み取り側は HF Dataset 参照（`hf_hub_download` / `pandas.read_parquet` + HF URL）を前提に再設計する。
 
@@ -141,6 +142,7 @@ All outputs use the same column naming rules via `config.sanitize_columns()`:
 - **null 率**: 高 null カラム（>50%）を警告、年×カラムの null マトリクス
 - **必須カラム**: player_id, season, 主要指標の存在確認
 - **重複チェック**: player_id × season の一意性
+- **dbt テスト**（[dbt/](dbt/README.md)）: マートのキー一意性・値域、自前 FIP と Stats API の完全一致（終了シーズン・1 球団・20 IP 以上の 4,966 行）、PA = AB+BB+HBP+SF+SH+CI の恒等式
 
 ## Migration History
 

@@ -21,3 +21,9 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# dbt build output
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/
+dbt/.user.yml

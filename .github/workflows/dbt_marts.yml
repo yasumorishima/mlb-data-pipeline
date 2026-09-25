@@ -1,0 +1,53 @@
+name: dbt Marts
+
+# Builds the analysis marts in dbt/ straight from the public Hugging Face
+# dataset (DuckDB reads the parquet over HTTPS, nothing to download first)
+# and runs every data test. Triggers: changes to dbt/, and each completed
+# weekly refresh, so a bad upstream table is caught the week it lands.
+
+on:
+  pull_request:
+    paths: ["dbt/**", ".github/workflows/dbt_marts.yml"]
+  push:
+    branches: [master]
+    paths: ["dbt/**", ".github/workflows/dbt_marts.yml"]
+  workflow_run:
+    workflows: ["Weekly Data Refresh"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      memo:
+        description: "Execution intent (required for manual runs)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dbt-marts-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    # After a refresh, only build when the refresh itself succeeded.
+    if: github.event_name != workflow_run || github.event.workflow_run.conclusion == success
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: dbt
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: dbt/requirements.txt
+
+      - name: Install dbt
+        run: pip install -r requirements.txt
+
+      - name: dbt build (models + tests)
+        run: dbt build --profiles-dir .
