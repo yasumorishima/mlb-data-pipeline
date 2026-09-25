@@ -9,4 +9,4 @@ where not m.is_partial
   and not (m.player_id = 600986 and m.season = 2024)
   and m.ip >= 20
   and m.fip_statsapi is not null
-  and abs(m.fip - m.fip_statsapi) > 0.001
+  and (m.fip is null or abs(m.fip - m.fip_statsapi) > 0.001)

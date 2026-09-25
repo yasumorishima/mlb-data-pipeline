@@ -4,7 +4,8 @@
 -- Savant run value is from the pitcher's side (positive = good for the
 -- pitcher; corr with wOBA allowed is -0.83), so 1.0 is the best pitch.
 -- A pitch type thrown by a single qualifying pitcher that season (knuckleballs,
--- forkballs) gets NULL rather than a percentile of 0.
+-- forkballs) gets NULL rather than a percentile of 0, and a NULL metric is
+-- left out of its population instead of sorting to the top.
 with a as (
     select * from {{ ref("stg_savant__pitcher_arsenal") }}
 )
@@ -20,12 +21,12 @@ select
     whiff_rate,
     xwoba_allowed,
     hard_hit_rate,
-    case when pitches >= 100
-          and count(*) over (partition by season, pitch_type, (pitches >= 100)) > 1 then
-        percent_rank() over (partition by season, pitch_type, (pitches >= 100) order by whiff_rate)
+    case when pitches >= 100 and whiff_rate is not null
+          and count(*) over (partition by season, pitch_type, (pitches >= 100 and whiff_rate is not null)) > 1 then
+        percent_rank() over (partition by season, pitch_type, (pitches >= 100 and whiff_rate is not null) order by whiff_rate)
     end                                        as whiff_pctile_in_type,
-    case when pitches >= 100
-          and count(*) over (partition by season, pitch_type, (pitches >= 100)) > 1 then
-        percent_rank() over (partition by season, pitch_type, (pitches >= 100) order by run_value_per_100)
+    case when pitches >= 100 and run_value_per_100 is not null
+          and count(*) over (partition by season, pitch_type, (pitches >= 100 and run_value_per_100 is not null)) > 1 then
+        percent_rank() over (partition by season, pitch_type, (pitches >= 100 and run_value_per_100 is not null) order by run_value_per_100)
     end                                        as rv100_pctile_in_type
 from a
