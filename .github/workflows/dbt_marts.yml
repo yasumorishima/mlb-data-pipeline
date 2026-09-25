@@ -31,7 +31,7 @@ concurrency:
 jobs:
   build:
     # After a refresh, only build when the refresh itself succeeded.
-    if: github.event_name != workflow_run || github.event.workflow_run.conclusion == success
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
