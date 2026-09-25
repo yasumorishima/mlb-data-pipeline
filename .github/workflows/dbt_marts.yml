@@ -25,7 +25,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: dbt-marts-${{ github.ref }}
+  # event_name keeps a push to master from cancelling a post-refresh check.
+  group: dbt-marts-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:

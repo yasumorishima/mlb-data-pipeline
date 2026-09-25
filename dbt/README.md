@@ -39,12 +39,18 @@ Besides key uniqueness and value ranges on every mart:
 
 - **FIP reconciliation** (`assert_fip_matches_statsapi`): our FIP, with the
   league constant rebuilt from the same table, must equal the Stats API figure
-  to 0.001 on every finished single-team season with 20+ IP. It does on all
-  4,966 such rows. Partial seasons are excluded because the sabermetrics
-  endpoint lags the counting stats (51 of 530 differ by more than 0.05 in 2026).
+  to 0.001 on every finished season with 20+ IP. As of the 2026-09-23 fetch it
+  does on 5,695 of 5,696 rows (largest gap 0.0002); the one exception, a 2024
+  season split across three teams, is listed by id. Partial seasons are
+  excluded because the sabermetrics endpoint lags the counting stats.
+- **Rate denominators** (`assert_rates_use_pa_and_bf`): K% x PA = SO and
+  BB% x PA = BB for batters (BF for pitchers). A 0-1 range test cannot catch
+  a K% over AB, this can.
 - **PA identity** (`assert_pa_identity`): PA = AB + BB + HBP + SF + SH + CI.
-  The Stats API is off by exactly one PA on 10 of 12,100 player-seasons; those
-  are a warning (`assert_pa_identity_off_by_one`), a larger gap fails.
+  The Stats API is off by exactly one PA on 10 of 12,100 player-seasons (as of
+  the 2026-09-23 fetch); those are a warning (`assert_pa_identity_off_by_one`),
+  a larger gap fails.
 
-Each test was checked to fail on a deliberately broken model (wrong FIP
-constant, an unaggregated OAA join that fans out rows, a wrong K% denominator).
+Each of these was checked to fail on a deliberately broken model: wrong FIP
+constant, an unaggregated OAA join that fans out rows, K% over HR, K% over AB,
+and Savant percents left on the 0-100 scale.

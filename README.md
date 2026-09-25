@@ -142,7 +142,7 @@ All outputs use the same column naming rules via `config.sanitize_columns()`:
 - **null 率**: 高 null カラム（>50%）を警告、年×カラムの null マトリクス
 - **必須カラム**: player_id, season, 主要指標の存在確認
 - **重複チェック**: player_id × season の一意性
-- **dbt テスト**（[dbt/](dbt/README.md)）: マートのキー一意性・値域、自前 FIP と Stats API の完全一致（終了シーズン・1 球団・20 IP 以上の 4,966 行）、PA = AB+BB+HBP+SF+SH+CI の恒等式
+- **dbt テスト**（[dbt/](dbt/README.md)）: マートのキー一意性・値域、自前 FIP と Stats API の一致（終了シーズン・20 IP 以上で差 0.001 以内・既知の例外 1 行）、K%・BB% の分母が PA／BF であることの検算、PA = AB+BB+HBP+SF+SH+CI の恒等式
 
 ## Migration History
 

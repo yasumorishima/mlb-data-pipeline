@@ -1,0 +1,10 @@
+version: 2
+
+models:
+  - name: stg_savant__pitcher_arsenal
+    columns:
+      - name: k_rate
+        description: Savant publishes 0-100; divided by 100 here.
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: usage
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]

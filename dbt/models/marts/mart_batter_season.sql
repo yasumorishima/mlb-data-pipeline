@@ -20,7 +20,7 @@ select
     b.pa,
     b.so::double / b.pa                        as k_rate,
     b.bb::double / b.pa                        as bb_rate,
-    b.slg - b.avg                              as iso,
+    (b.tb - b.hits)::double / nullif(b.ab, 0)  as iso,
     b.avg,
     b.obp,
     b.slg,

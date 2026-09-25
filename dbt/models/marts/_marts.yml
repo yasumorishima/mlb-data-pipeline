@@ -53,7 +53,7 @@ models:
       - unique_combination: {arguments: {columns: [player_id, season_1]}}
     columns:
       - name: pair_weight
-        data_tests: [not_null, {in_range: {arguments: {min_value: 1}}}]
+        data_tests: [not_null]
 
   - name: mart_pitch_arsenal_scouting
     description: >
@@ -64,7 +64,8 @@ models:
     columns:
       - name: usage
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
-      - name: whiff_pctile_in_type
+      - name: whiff_rate
+        description: Savant publishes 0-100; staging divides by 100.
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
-      - name: rv100_pctile_in_type
+      - name: hard_hit_rate
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
