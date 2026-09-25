@@ -52,3 +52,35 @@ jobs:
 
       - name: dbt build (models + tests)
         run: dbt build --profiles-dir .
+
+      # Publish only from master, and only after every model and data test
+      # above passed (a failed step skips everything below). export_marts.py
+      # refuses a missing, empty or unexpected mart.
+      - name: Export marts to parquet
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        run: python export_marts.py target/mlb.duckdb ../marts_out
+
+      - name: Publish marts to Hugging Face
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        working-directory: .
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install --quiet "huggingface_hub>=0.26"
+          count=0
+          for f in marts_out/*.parquet; do
+            base="$(basename "$f")"
+            hf upload yasumorishima/mlb-stats "$f" "marts/$base" \
+              --repo-type dataset \
+              --commit-message "dbt marts: $base"
+            count=$((count + 1))
+          done
+          if [ "$count" -eq 0 ]; then
+            echo "no marts exported"
+            exit 1
+          fi
+          # The card lists the marts as viewer configs, so ship it with them.
+          hf upload yasumorishima/mlb-stats docs/hf_dataset_card.md README.md \
+            --repo-type dataset \
+            --commit-message "Update dataset card"
+          echo "Published $count marts"

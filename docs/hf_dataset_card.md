@@ -42,6 +42,14 @@ configs:
     data_files: statsapi_batting.parquet
   - config_name: statsapi_pitching
     data_files: statsapi_pitching.parquet
+  - config_name: mart_batter_season
+    data_files: marts/mart_batter_season.parquet
+  - config_name: mart_pitcher_season
+    data_files: marts/mart_pitcher_season.parquet
+  - config_name: mart_batter_aging_pairs
+    data_files: marts/mart_batter_aging_pairs.parquet
+  - config_name: mart_pitch_arsenal_scouting
+    data_files: marts/mart_pitch_arsenal_scouting.parquet
 ---
 
 # MLB Shared Stats
@@ -78,6 +86,20 @@ one.
 
 `statcast_pitches` (pitch-level, ~6.8M rows) is fetched by manual dispatch
 only and is not part of the weekly refresh.
+
+## Marts (`marts/`)
+
+Analysis-ready tables built from the tables above by the
+[dbt project](https://github.com/yasumorishima/mlb-data-pipeline/tree/master/dbt)
+and republished after every weekly refresh, only when all of its data tests
+pass. Rows for the season in progress carry `is_partial = true`.
+
+| File | Grain |
+|---|---|
+| `marts/mart_batter_season.parquet` | batter-season (PA > 0): wOBA, wRC+, WAR next to xwOBA, batted-ball mix, bat speed, sprint speed, OAA |
+| `marts/mart_pitcher_season.parquet` | pitcher-season: K%, BB%, K-BB%, FIP, xERA, pitch-mix breadth |
+| `marts/mart_batter_aging_pairs.parquet` | same batter, season and season + 1: input for aging curves |
+| `marts/mart_pitch_arsenal_scouting.parquet` | pitcher-season-pitch: usage rank, whiff and run-value percentiles within type |
 
 ### Why the three FanGraphs tables are frozen
 
