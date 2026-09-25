@@ -44,8 +44,11 @@ Besides key uniqueness and value ranges on every mart:
   season split across three teams, is listed by id. Partial seasons are
   excluded because the sabermetrics endpoint lags the counting stats.
 - **Rate denominators** (`assert_rates_use_pa_and_bf`): K% x PA = SO and
-  BB% x PA = BB for batters (BF for pitchers). A 0-1 range test cannot catch
-  a K% over AB, this can.
+  BB% x PA = BB for batters (BF for pitchers). A 0-1 range test notices K%
+  over AB only on the 56 rows with AB = 0; this fails on every row.
+- **ISO** (`assert_iso_from_total_bases`) from TB - H over AB, NULL when AB = 0,
+  and **single-qualifier percentiles** (`assert_single_qualifier_pctile_is_null`)
+  are NULL rather than 0.
 - **PA identity** (`assert_pa_identity`): PA = AB + BB + HBP + SF + SH + CI.
   The Stats API is off by exactly one PA on 10 of 12,100 player-seasons (as of
   the 2026-09-23 fetch); those are a warning (`assert_pa_identity_off_by_one`),
