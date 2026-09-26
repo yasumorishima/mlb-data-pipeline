@@ -703,11 +703,15 @@ def test_the_card_declares_one_configuration_per_table():
     assert declared, "no configs parsed out of the card front matter"
     expected = {t for step, tables in C.STEP_TABLES.items() if step != "statcast"
                 for t in tables}
-    assert set(declared) == expected, (
-        "card configs do not match the tables: "
-        + str(sorted(set(declared) ^ expected)))
+    # dbt marts are published under marts/ by .github/workflows/dbt_marts.yml.
+    marts = {p.stem for p in (ROOT / "dbt" / "models" / "marts").glob("*.sql")}
+    assert marts, "no dbt marts found"
+    assert set(declared) == expected | marts, (
+        "card configs do not match the tables and marts: "
+        + str(sorted(set(declared) ^ (expected | marts))))
     for name, files in declared.items():
-        assert files == name + ".parquet", name + " points at " + str(files)
+        want = ("marts/" if name in marts else "") + name + ".parquet"
+        assert files == want, name + " points at " + str(files)
         assert "*" not in files, name + " uses a glob"
 
 

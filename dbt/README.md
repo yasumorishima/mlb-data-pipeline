@@ -31,7 +31,11 @@ dbt build --profiles-dir . --vars "{raw_base: /path/to/dir}" # or from local par
 
 The DuckDB file lands in `dbt/target/mlb.duckdb` (override with `MLB_MARTS_DB`).
 CI (`.github/workflows/dbt_marts.yml`) runs the same build on every change to
-`dbt/` and after every successful weekly refresh.
+`dbt/` and after every successful weekly refresh. On master, when every model and
+test passes, `export_marts.py` writes the four marts to parquet and they are
+published to the dataset under
+[`marts/`](https://huggingface.co/datasets/yasumorishima/mlb-stats/tree/main/marts),
+so dashboards and models can read them without running dbt.
 
 ## Data tests
 

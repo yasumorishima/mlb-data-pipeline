@@ -256,7 +256,7 @@ jobs:
           !cancelled()
           && steps.audit_tests.outcome == 'success'
           && steps.audit.outcome != 'skipped'
-        run: pip install --quiet "huggingface_hub>=0.26"
+        run: pip install --quiet "huggingface_hub>=0.34"  # `hf` needs 0.34
 
       - name: Upload to Hugging Face
         if: >-
