@@ -1,71 +1,238 @@
 version: 2
 
+# Every mart has an enforced contract: dbt refuses to build it unless the
+# query returns exactly these columns with these types, in this order. The
+# marts are published to Hugging Face and read by other repos, so a renamed
+# column or a changed type has to be a deliberate edit here.
+
 models:
   - name: mart_batter_season
     description: >
       One row per batter-season with PA > 0. Outcome stats from the MLB Stats
       API next to Statcast process stats (xwOBA, batted-ball mix, bat speed,
       sprint speed, OAA summed over positions).
+    config:
+      contract: {enforced: true}
     data_tests:
-      - unique_combination: {arguments: {columns: [player_id, season]}}
+      - {unique_combination: {arguments: {columns: [player_id, season]}}}
     columns:
       - name: player_id
+        data_type: bigint
+        constraints: [{type: not_null}]
         data_tests: [not_null]
       - name: season
+        data_type: bigint
+        constraints: [{type: not_null}]
         data_tests: [not_null]
-      - name: pa
-        data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 800}}}]
+      - name: player_name
+        data_type: varchar
+      - name: team_id
+        data_type: bigint
+      - name: primary_position
+        data_type: varchar
       - name: age
+        data_type: bigint
         data_tests: [not_null, {in_range: {arguments: {min_value: 17, max_value: 50}}}]
+      - name: games
+        data_type: bigint
+      - name: pa
+        data_type: bigint
+        data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 800}}}]
       - name: k_rate
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: bb_rate
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: iso
+        data_type: double
+      - name: avg
+        data_type: double
+      - name: obp
+        data_type: double
+      - name: slg
+        data_type: double
+      - name: babip
+        data_type: double
       - name: woba
+        data_type: double
         description: A home run in the only PA is wOBA ~2, so the bound is loose.
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 2.5}}}]
+      - name: xwoba
+        data_type: double
       - name: woba_minus_xwoba
+        data_type: double
         description: Positive = results ran ahead of contact quality.
+      - name: wrc_plus
+        data_type: double
+      - name: war
+        data_type: double
+      - name: gb_rate
+        data_type: double
+      - name: fb_rate
+        data_type: double
+      - name: ld_rate
+        data_type: double
+      - name: pull_air_rate
+        data_type: double
+      - name: avg_bat_speed
+        data_type: double
+      - name: attack_angle
+        data_type: double
       - name: sprint_speed
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 15, max_value: 35}}}]
+      - name: oaa
+        data_type: bigint
+      - name: fielding_runs_prevented
+        data_type: bigint
+      - name: is_partial
+        data_type: boolean
 
   - name: mart_pitcher_season
     description: >
       One row per pitcher-season. FIP is rebuilt from the table itself with a
       per-season league constant (int_league_pitching_season).
+    config:
+      contract: {enforced: true}
     data_tests:
-      - unique_combination: {arguments: {columns: [player_id, season]}}
+      - {unique_combination: {arguments: {columns: [player_id, season]}}}
     columns:
       - name: player_id
+        data_type: bigint
+        constraints: [{type: not_null}]
         data_tests: [not_null]
+      - name: season
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: player_name
+        data_type: varchar
+      - name: team_id
+        data_type: bigint
+      - name: age
+        data_type: bigint
+      - name: games
+        data_type: bigint
+      - name: games_started
+        data_type: bigint
+      - name: ip
+        data_type: double
+      - name: bf
+        data_type: bigint
       - name: k_rate
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: bb_rate
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: k_minus_bb_rate
+        data_type: double
+      - name: ground_out_share
+        data_type: double
+      - name: era
+        data_type: double
+      - name: fip
+        data_type: double
+      - name: fip_statsapi
+        data_type: double
+      - name: xera
+        data_type: double
+      - name: era_minus_xera
+        data_type: double
+      - name: xwoba_allowed
+        data_type: double
       - name: n_pitch_types_5pct
+        data_type: bigint
         description: Pitch types thrown at least 5% of the time (Savant arsenal, 2017+).
+      - name: primary_pitch_type
+        data_type: varchar
+      - name: primary_pitch_usage
+        data_type: double
+      - name: war
+        data_type: double
+      - name: is_partial
+        data_type: boolean
 
   - name: mart_batter_aging_pairs
     description: >
       Consecutive-season pairs for the same batter; the input for aging and
       development curves. pair_weight is the harmonic mean of the two PAs.
+    config:
+      contract: {enforced: true}
     data_tests:
-      - unique_combination: {arguments: {columns: [player_id, season_1]}}
+      - {unique_combination: {arguments: {columns: [player_id, season_1]}}}
     columns:
+      - name: player_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: season_1
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: age_1
+        data_type: bigint
+      - name: pa_1
+        data_type: bigint
+      - name: pa_2
+        data_type: bigint
       - name: pair_weight
+        data_type: double
         data_tests: [not_null]
+      - name: woba_1
+        data_type: double
+      - name: woba_2
+        data_type: double
+      - name: woba_delta
+        data_type: double
+      - name: k_rate_delta
+        data_type: double
+      - name: bb_rate_delta
+        data_type: double
+      - name: iso_delta
+        data_type: double
+      - name: touches_2020
+        data_type: boolean
+      - name: second_season_partial
+        data_type: boolean
 
   - name: mart_pitch_arsenal_scouting
     description: >
       Pitcher-season-pitch rows with usage rank and within-type percentiles
       (pitches >= 100 only; NULL below that).
+    config:
+      contract: {enforced: true}
     data_tests:
-      - unique_combination: {arguments: {columns: [player_id, season, pitch_type]}}
+      - {unique_combination: {arguments: {columns: [player_id, season, pitch_type]}}}
     columns:
+      - name: player_id
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: season
+        data_type: bigint
+        constraints: [{type: not_null}]
+      - name: pitch_type
+        data_type: varchar
+        constraints: [{type: not_null}]
+      - name: pitch_name
+        data_type: varchar
+      - name: pitches
+        data_type: bigint
       - name: usage
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: usage_rank
+        data_type: bigint
+      - name: run_value_per_100
+        data_type: double
       - name: whiff_rate
+        data_type: double
         description: Savant publishes 0-100; staging divides by 100.
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: xwoba_allowed
+        data_type: double
       - name: hard_hit_rate
+        data_type: double
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
+      - name: whiff_pctile_in_type
+        data_type: double
+      - name: rv100_pctile_in_type
+        data_type: double
