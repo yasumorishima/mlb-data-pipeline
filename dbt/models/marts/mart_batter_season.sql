@@ -5,7 +5,10 @@ with b as (
     select * from {{ ref("stg_statsapi__batting") }} where pa > 0
 ),
 oaa as (
-    select player_id, season, sum(oaa) as oaa, sum(fielding_runs_prevented) as fielding_runs_prevented
+    select player_id, season,
+        -- sum() of BIGINT is HUGEINT in DuckDB, which parquet stores as DOUBLE
+        cast(sum(oaa) as bigint) as oaa,
+        cast(sum(fielding_runs_prevented) as bigint) as fielding_runs_prevented
     from {{ ref("stg_savant__oaa") }}
     group by player_id, season
 )
