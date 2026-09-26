@@ -78,7 +78,7 @@ Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `stat
 |---------|--------|-------------|
 | [baseball-mlops](https://github.com/yasumorishima/baseball-mlops) | Weekly Retrain 停止中 | fg_batting, fg_pitching, sc_*, sprint_speed, park_factors |
 | [mlb-win-probability](https://github.com/yasumorishima/mlb-win-probability) | Cloud Run 削除済 | statcast_pitches, fg_batting, fg_pitching, sprint_speed, oaa_team, catcher, park_factors |
-| [dbt marts](dbt/) | 稼働中（CI で毎週 build） | statsapi_*, sc_*, sprint_speed, oaa → 分析用マート 5 本（選手評価・年齢曲線入力・球種スカウティング・指標の翌年への持ち越し）。全マートに契約（列名と型を強制） |
+| [dbt marts](dbt/) | 稼働中（CI で毎週 build） | statsapi_*, sc_*, sprint_speed, oaa → 分析用マート 5 本（選手評価・年齢曲線入力・球種スカウティング・指標の翌年への持ち越し）。全マートに契約（列名と型を強制）。同じ SQL を BigQuery sandbox（課金アカウントなし）でも build し、全テスト通過・DuckDB と全セル一致（浮動小数は 1e-15 以内） |
 
 読み取り側は HF Dataset 参照（`hf_hub_download` / `pandas.read_parquet` + HF URL）を前提に再設計する。
 
@@ -153,6 +153,7 @@ All outputs use the same column naming rules via `config.sanitize_columns()`:
 - **HF 移行** (2026-05-27〜29): RPi5 USB SSD 故障・廃止に伴い、全データを public HF Dataset [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats) へ移行（HF が正本）
 - **Phase 4** (2026-06-10): 週次 refresh を GitHub Actions（ubuntu-latest, 無料）+ HF upload に再構築、cron 再開
 - **Phase 5** (2026-09-23): 出力監査（`check_outputs.py`）で通ったテーブルだけ upload・`park_factors` を Savant へ（初投入）・`statsapi_batting` / `statsapi_pitching` を新設（FanGraphs 遮断の代替）・end_year 自動化・HF の季節を失う upload を拒否
+- **BigQuery sandbox** (2026-09-26): dbt マートを課金アカウントの無い GCP プロジェクトでも build（HF が正本のまま。BigQuery は同じマートの 2 つ目のエンジンで、2026-04 に退役した課金ありの保存先とは別物）。鍵を置かず Workload Identity Federation で master からだけ書き込む
 
 ## Credits
 

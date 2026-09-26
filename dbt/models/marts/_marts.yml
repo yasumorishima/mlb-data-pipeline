@@ -17,78 +17,77 @@ models:
       - {unique_combination: {arguments: {columns: [player_id, season]}}}
     columns:
       - name: player_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
         data_tests: [not_null]
       - name: season
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
         data_tests: [not_null]
       - name: player_name
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
       - name: team_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: primary_position
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
       - name: age
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: 17, max_value: 50}}}]
       - name: games
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: pa
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: 1, max_value: 800}}}]
       - name: k_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: bb_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: iso
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: avg
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: obp
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: slg
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: babip
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: woba
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         description: A home run in the only PA is wOBA ~2, so the bound is loose.
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 2.5}}}]
       - name: xwoba
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: woba_minus_xwoba
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         description: Positive = results ran ahead of contact quality.
       - name: wrc_plus
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: war
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: gb_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: fb_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: ld_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: pull_air_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: avg_bat_speed
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: attack_angle
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: sprint_speed
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 15, max_value: 35}}}]
       - name: oaa
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: fielding_runs_prevented
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: is_partial
-        data_type: boolean
-
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
   - name: mart_pitcher_season
     description: >
       One row per pitcher-season. FIP is rebuilt from the table itself with a
@@ -99,60 +98,59 @@ models:
       - {unique_combination: {arguments: {columns: [player_id, season]}}}
     columns:
       - name: player_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
         data_tests: [not_null]
       - name: season
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
       - name: player_name
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
       - name: team_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: age
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: games
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: games_started
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: ip
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: bf
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: k_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: bb_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: k_minus_bb_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: ground_out_share
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: era
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: fip
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: fip_statsapi
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: xera
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: era_minus_xera
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: xwoba_allowed
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: n_pitch_types_5pct
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         description: Pitch types thrown at least 5% of the time (Savant arsenal, 2017+).
       - name: primary_pitch_type
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
       - name: primary_pitch_usage
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: war
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: is_partial
-        data_type: boolean
-
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
   - name: mart_batter_aging_pairs
     description: >
       Consecutive-season pairs for the same batter; the input for aging and
@@ -163,37 +161,36 @@ models:
       - {unique_combination: {arguments: {columns: [player_id, season_1]}}}
     columns:
       - name: player_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
       - name: season_1
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
       - name: age_1
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: pa_1
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: pa_2
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: pair_weight
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null]
       - name: woba_1
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: woba_2
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: woba_delta
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: k_rate_delta
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: bb_rate_delta
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: iso_delta
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: touches_2020
-        data_type: boolean
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
       - name: second_season_partial
-        data_type: boolean
-
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
   - name: mart_pitch_arsenal_scouting
     description: >
       Pitcher-season-pitch rows with usage rank and within-type percentiles
@@ -204,38 +201,38 @@ models:
       - {unique_combination: {arguments: {columns: [player_id, season, pitch_type]}}}
     columns:
       - name: player_id
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
       - name: season
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         constraints: [{type: not_null}]
       - name: pitch_type
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
         constraints: [{type: not_null}]
       - name: pitch_name
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
       - name: pitches
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: usage
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: usage_rank
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
       - name: run_value_per_100
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: whiff_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         description: Savant publishes 0-100; staging divides by 100.
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: xwoba_allowed
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: hard_hit_rate
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 1}}}]
       - name: whiff_pctile_in_type
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
       - name: rv100_pctile_in_type
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
   - name: mart_scouting_reliability
     description: >
       Year-to-year correlation of each pitch metric for the same pitcher and
@@ -250,23 +247,23 @@ models:
       - unique_combination: {arguments: {columns: [metric, min_pitches_lo]}}
     columns:
       - name: metric
-        data_type: varchar
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
         constraints: [{type: not_null}]
         data_tests: [{accepted_values: {arguments: {values: [usage, whiff_rate, run_value_per_100, xwoba_allowed, hard_hit_rate]}}}]
       - name: min_pitches_lo
-        data_type: integer
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
         constraints: [{type: not_null}]
-        data_tests: [{accepted_values: {arguments: {values: [100, 200, 400, 800]}}}]
+        data_tests: [{accepted_values: {arguments: {values: [100, 200, 400, 800], quote: false}}}]
       - name: min_pitches_hi
-        data_type: integer
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
         description: NULL for the open top bin (800 pitches and up).
       - name: n_pairs
-        data_type: bigint
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         description: A bin with fewer than 30 pairs fails the build rather than publish a noisy correlation.
         data_tests: [{in_range: {arguments: {min_value: 30}}}]
       - name: yoy_corr_raw
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
       - name: yoy_corr_within_type
-        data_type: double
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]

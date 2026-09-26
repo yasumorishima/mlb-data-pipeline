@@ -19,8 +19,8 @@ select
     ip,
     bf,
     9.0 * er / ip                              as lg_era,
-    so::double / bf                            as lg_k_rate,
-    bb::double / bf                            as lg_bb_rate,
+    cast(so as {{ float_type() }}) / bf                            as lg_k_rate,
+    cast(bb as {{ float_type() }}) / bf                            as lg_bb_rate,
     9.0 * er / ip
       - (13.0 * hr + 3.0 * (bb + hbp) - 2.0 * so) / ip as fip_constant
 from totals

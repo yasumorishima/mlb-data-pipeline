@@ -35,7 +35,7 @@ select
     batting                                as batting_runs,
     baseRunning                            as baserunning_runs,
     fielding                               as fielding_runs,
-    "positional"                           as positional_runs,
+    {{ adapter.quote("positional") }}      as positional_runs,
     is_partial,
     fetched_at
 from {{ source("raw", "statsapi_batting") }}
