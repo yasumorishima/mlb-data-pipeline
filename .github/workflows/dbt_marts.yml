@@ -24,17 +24,19 @@ on:
 permissions:
   contents: read
 
-concurrency:
-  # Pull requests cancel their own stale runs. Every master run (push,
-  # post-refresh, dispatch) shares one group and is never cancelled, so two
-  # runs cannot publish at once and an upload is never cut off halfway.
-  group: dbt-marts-${{ github.event_name == 'pull_request' && github.ref || 'master' }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
   build:
     # After a refresh, only build when the refresh itself succeeded.
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # Job-level, so a skipped job (failed refresh) never takes a place in the
+    # queue. One group per ref: master runs (push, post-refresh, master
+    # dispatch) run one at a time and a running one is never cancelled, so an
+    # upload is never cut off. GitHub keeps only the newest pending run per
+    # group, which is the one with the latest code and data. Pull requests
+    # cancel their own stale runs.
+    concurrency:
+      group: dbt-marts-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -52,14 +54,28 @@ jobs:
       - name: Install dbt
         run: pip install -r requirements.txt
 
+      # Pin the input to the dataset commit that is current now, so the
+      # build reads one consistent snapshot and the manifest can name it.
+      - name: Resolve the dataset revision
+        id: rev
+        run: |
+          sha=$(curl --fail --max-time 30 -sS https://huggingface.co/api/datasets/yasumorishima/mlb-stats/revision/main | jq -r .sha)
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]] || { echo "bad revision: $sha"; exit 1; }
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "reading yasumorishima/mlb-stats@$sha"
+
       - name: dbt build (models + tests)
-        run: dbt build --profiles-dir .
+        run: >-
+          dbt build --profiles-dir .
+          --vars '{raw_base: "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/${{ steps.rev.outputs.sha }}"}'
 
       # Publish only from master, and only after every model and data test
       # above passed (a failed step skips everything below). export_marts.py
       # refuses a missing, empty or unexpected mart.
       - name: Export marts to parquet
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
+        env:
+          INPUT_REVISION: ${{ steps.rev.outputs.sha }}
         run: python export_marts.py target/mlb.duckdb ../publish/marts
 
       - name: Publish marts to Hugging Face
@@ -68,8 +84,9 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          # `hf` ships with huggingface_hub 0.34.
-          pip install --quiet "huggingface_hub>=0.34"
+          # `hf` ships with huggingface_hub 0.34. Below 2.0 a folder upload
+          # is one commit by contract (2.x may split large folders).
+          pip install --quiet "huggingface_hub>=0.34,<2"
           shopt -s nullglob
           marts=(publish/marts/*.parquet)
           if [ "${#marts[@]}" -eq 0 ]; then

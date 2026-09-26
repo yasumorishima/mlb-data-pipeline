@@ -60,7 +60,8 @@ def main(db_path: str, out_dir: str) -> int:
     # later build fails its tests, these files stay as they were.
     manifest = {
         "built_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "git_sha": os.environ.get("GITHUB_SHA", ""),
+        "pipeline_commit": os.environ.get("GITHUB_SHA", ""),
+        "input_dataset_revision": os.environ.get("INPUT_REVISION", ""),
         "rows": rows,
     }
     (out / "_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
