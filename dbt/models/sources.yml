@@ -2,6 +2,7 @@ version: 2
 
 sources:
   - name: raw
+    schema: "{{ env_var('BQ_RAW_DATASET', 'mlb_raw') if target.type == 'bigquery' else 'raw' }}"
     description: >
       Parquet files published by this repo to the Hugging Face dataset
       yasumorishima/mlb-stats (one file per table, all seasons in one file).

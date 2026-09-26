@@ -3,7 +3,10 @@
 Analysis-ready tables built on top of the raw parquet this repo publishes to
 [yasumorishima/mlb-stats](https://huggingface.co/datasets/yasumorishima/mlb-stats).
 dbt-core + DuckDB, so it runs anywhere for free: DuckDB reads the parquet over
-HTTPS and nothing has to be downloaded or loaded first.
+HTTPS and nothing has to be downloaded or loaded first. The same SQL also
+builds on BigQuery (see [BigQuery](#bigquery-sandbox)); every model and test
+passes on both (with the same one warning), and the two builds agree on every
+cell (text and integers exactly, floats within 1e-15).
 
 ## Layers
 
@@ -37,6 +40,43 @@ test passes, `export_marts.py` writes the four marts to parquet and they are
 published to the dataset under
 [`marts/`](https://huggingface.co/datasets/yasumorishima/mlb-stats/tree/main/marts),
 so dashboards and models can read them without running dbt.
+
+## BigQuery (sandbox)
+
+The `bigquery` target builds the same models in the GCP project
+`mlb-marts-sandbox`, which has **no billing account** (BigQuery sandbox: free,
+1 TiB of queries a month, tables expire after 60 days, and 10 GiB of storage
+for the life of the project that deleting data does not give back). The
+Hugging Face dataset stays the source of truth; BigQuery is a second engine
+for the same marts, not a store.
+
+- `load_raw_bigquery.py <revision>` copies each raw source table from one
+  dataset revision into the `mlb_raw` dataset with a batch load job (free and
+  allowed in the sandbox; streaming inserts and DML are not) and checks the
+  row count against the parquet. A revision that is already loaded is not
+  loaded again: one full build writes about 25 MB (raw 19 MB, marts 6 MB,
+  measured 2026-09-26), so the lifetime allowance covers some 400 builds.
+  Each raw table's expiry is set 59 days out on every load.
+- `dbt build --profiles-dir . --target bigquery` then builds and tests
+  everything into `mlb_marts`. Credentials: Application Default Credentials,
+  or an OAuth access token in `BQ_ACCESS_TOKEN`.
+- CI runs both steps in the `bigquery` job of `dbt_marts.yml`, only on master
+  and only after the DuckDB build passed, with the same input revision. No key
+  is stored in GitHub: the job's OIDC token is exchanged through Workload
+  Identity Federation, and the provider accepts only this workflow file on this
+  repository's master branch.
+
+What had to change so one set of SQL runs on both engines:
+
+| DuckDB-only | Portable form | Why |
+| --- | --- | --- |
+| `x::double` | `cast(x as {{ float_type() }})` | `dbt.type_float()` is FLOAT, which is 32-bit on DuckDB |
+| `count(*) filter (where c)` | `count(case when c then 1 end)` | no FILTER clause on BigQuery |
+| `arg_max(pitch_type, usage)` | `row_number()` ordered by usage, then pitch code | also fixes 13 tied pitcher-seasons whose primary pitch was arbitrary |
+| `"positional"` | `{{ adapter.quote("positional") }}` | a double-quoted name is a string literal on BigQuery |
+| bare `sprint_speed` from table `sprint_speed` | `s.sprint_speed` | BigQuery resolves the bare name to the table (a STRUCT of the row) |
+| `accepted_values: [100, 200, ...]` | same, with `quote: false` | BigQuery will not compare INT64 with a string |
+| contract `data_type: double` | `float64` on BigQuery, `double` on DuckDB | the contract types are adapter-specific |
 
 ## Data tests
 

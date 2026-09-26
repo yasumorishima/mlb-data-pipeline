@@ -6,3 +6,14 @@ mlb_marts:
       path: "{{ env_var(\"MLB_MARTS_DB\", \"target/mlb.duckdb\") }}"
       extensions: [httpfs, parquet]
       threads: 2
+    # BigQuery sandbox (no billing account): the raw tables are loaded by
+    # load_raw_bigquery.py, the models are built into BQ_DATASET.
+    bigquery:
+      type: bigquery
+      method: "{{ \"oauth-secrets\" if env_var(\"BQ_ACCESS_TOKEN\", \"\") else \"oauth\" }}"
+      token: "{{ env_var(\"BQ_ACCESS_TOKEN\", \"\") }}"
+      project: "{{ env_var(\"BQ_PROJECT\", \"mlb-marts-sandbox\") }}"
+      dataset: "{{ env_var(\"BQ_DATASET\", \"mlb_marts\") }}"
+      location: US
+      threads: 4
+      job_execution_timeout_seconds: 300
