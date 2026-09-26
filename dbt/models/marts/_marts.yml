@@ -236,3 +236,35 @@ models:
         data_type: double
       - name: rv100_pctile_in_type
         data_type: double
+  - name: mart_scouting_reliability
+    description: >
+      Year-to-year correlation of each pitch metric for the same pitcher and
+      pitch type, by the smaller of the two seasons' pitch counts. The
+      within-type column subtracts the pitch type's season mean first, which
+      is the comparison scouting makes.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination: {arguments: {columns: [metric, min_pitches_lo]}}
+    columns:
+      - name: metric
+        data_type: varchar
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [usage, whiff_rate, run_value_per_100, xwoba_allowed, hard_hit_rate]}}}]
+      - name: min_pitches_lo
+        data_type: integer
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [100, 200, 400, 800]}}}]
+      - name: min_pitches_hi
+        data_type: integer
+        description: NULL for the open top bin (800 pitches and up).
+      - name: n_pairs
+        data_type: bigint
+        description: A correlation from fewer than 30 pairs is not published.
+        data_tests: [{in_range: {arguments: {min_value: 30}}}]
+      - name: yoy_corr_raw
+        data_type: double
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+      - name: yoy_corr_within_type
+        data_type: double
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]

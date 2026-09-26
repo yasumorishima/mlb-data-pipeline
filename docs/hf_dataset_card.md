@@ -50,6 +50,8 @@ configs:
     data_files: marts/mart_batter_aging_pairs.parquet
   - config_name: mart_pitch_arsenal_scouting
     data_files: marts/mart_pitch_arsenal_scouting.parquet
+  - config_name: mart_scouting_reliability
+    data_files: marts/mart_scouting_reliability.parquet
 ---
 
 # MLB Shared Stats
@@ -102,6 +104,7 @@ pipeline commit, and the revision of this dataset they were built from. Rows for
 | `marts/mart_pitcher_season.parquet` | pitcher-season: K%, BB%, K-BB%, FIP, xERA, pitch-mix breadth |
 | `marts/mart_batter_aging_pairs.parquet` | same batter, season and season + 1: input for aging curves |
 | `marts/mart_pitch_arsenal_scouting.parquet` | pitcher-season-pitch: usage rank, whiff and run-value percentiles within type |
+| `marts/mart_scouting_reliability.parquet` | metric x sample-size bin: year-to-year correlation of each pitch metric, raw and within pitch type |
 
 ### Why the three FanGraphs tables are frozen
 

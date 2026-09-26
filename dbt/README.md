@@ -19,6 +19,7 @@ HTTPS and nothing has to be downloaded or loaded first.
 | `mart_pitcher_season` | pitcher-season | K%, BB%, K-BB%, FIP rebuilt from the table, xERA, ERA - xERA, pitch-mix breadth. |
 | `mart_batter_aging_pairs` | batter, season and season + 1 | Input for aging / development curves (delta method or a hierarchical model), weighted by the harmonic mean of PA. |
 | `mart_pitch_arsenal_scouting` | pitcher-season-pitch | Usage rank plus whiff and run-value percentiles within the same pitch type and season. |
+| `mart_scouting_reliability` | metric x sample-size bin | Year-to-year correlation of each pitch metric for the same pitcher and pitch type, raw and within pitch type: how far a one-season number can be trusted. |
 
 ## Run it
 
