@@ -14,7 +14,9 @@ cell (text and integers exactly, floats within 1e-15).
 | --- | --- | --- |
 | `staging/` (`stg_*`) | view | One model per raw table: rename, type, rescale percents to 0-1. No joins. |
 | `intermediate/` (`int_*`) | view | League totals per season and the FIP constant. |
-| `marts/` (`mart_*`) | table | What an analyst or a dashboard reads. |
+| `marts/` (`mart_*`) | table | What an analyst reads; published to Hugging Face. |
+| `bi/` (`bi_*`) | table | What the dashboard reads (built, not published). |
+| seed `mlb_teams` | table | The 30 franchises by team id: abbreviation, 2026 name, league, division. |
 
 | Mart | Grain | Use |
 | --- | --- | --- |
@@ -23,6 +25,12 @@ cell (text and integers exactly, floats within 1e-15).
 | `mart_batter_aging_pairs` | batter, season and season + 1 | Input for aging / development curves (delta method or a hierarchical model), weighted by the harmonic mean of PA. |
 | `mart_pitch_arsenal_scouting` | pitcher-season-pitch | Usage rank plus whiff and run-value percentiles within the same pitch type and season. |
 | `mart_scouting_reliability` | metric x sample-size bin | Year-to-year correlation of each pitch metric for the same pitcher and pitch type, raw and within pitch type: how far a one-season number can be trusted. |
+
+| BI table | Grain | Adds to the mart |
+| --- | --- | --- |
+| `bi_batter_season` | batter-season | Team abbreviation, league, division; 0-100 season percentiles (100 = best end, so K% is reversed) for wOBA, xwOBA, wRC+, K%, BB%, ISO, bat speed, sprint speed, OAA, among batters with PA >= 40% of the season's PA leader (about 300 PA in a full season, scales with 2020 and a season in progress). |
+| `bi_pitcher_season` | pitcher-season | Team, SP/RP role (SP when at least half the games were starts), percentiles for K%, BB%, K-BB%, FIP, xERA, xwOBA allowed among pitchers with BF >= 30% of the leader (about 250 BF, so full-time relievers are ranked). |
+| `bi_pitch_arsenal` | pitcher-season-pitch | The pitcher's name and team; the mart's within-type percentiles on the same 0-100 scale. |
 
 ## Run it
 
@@ -54,9 +62,13 @@ for the same marts, not a store.
   dataset revision into the `mlb_raw` dataset with a batch load job (free and
   allowed in the sandbox; streaming inserts and DML are not) and checks the
   row count against the parquet. A revision that is already loaded is not
-  loaded again: one full build writes about 25 MB (raw 19 MB, marts 6 MB,
-  measured 2026-09-26), so the lifetime allowance covers some 400 builds.
-  Each raw table's expiry is set 59 days out on every load.
+  loaded again. Measured 2026-09-27: raw 19 MB (written only when the
+  revision changes), marts 6.0 MB and dashboard tables 6.2 MB (rewritten by
+  every build), so about 1.1 GB a year at one new revision a week in season,
+  some nine years of the lifetime allowance.
+  Each raw table's expiry is set 59 days out on every run, including a run
+  that loads nothing: off-season refreshes can leave the revision unchanged
+  for months, and the tables would otherwise expire under the weekly build.
 - `dbt build --profiles-dir . --target bigquery` then builds and tests
   everything into `mlb_marts`. Credentials: Application Default Credentials,
   or an OAuth access token in `BQ_ACCESS_TOKEN`.

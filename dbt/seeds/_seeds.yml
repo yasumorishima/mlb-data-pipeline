@@ -1,0 +1,14 @@
+version: 2
+
+seeds:
+  - name: mlb_teams
+    description: >
+      The 30 MLB franchises by MLB Stats API team id, with the 2026 name,
+      abbreviation, league and division (teams?sportId=1&season=2026). A
+      franchise keeps its id through renames, so older seasons show today's
+      name (the 2015-2021 Cleveland rows read "Guardians").
+    columns:
+      - name: team_id
+        data_tests: [unique, not_null]
+      - name: team_abbr
+        data_tests: [unique, not_null]

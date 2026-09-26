@@ -23,6 +23,19 @@ models:
       +materialized: view
     marts:
       +materialized: table
+    bi:
+      +materialized: table
+
+seeds:
+  mlb_marts:
+    mlb_teams:
+      # Fixed types so both adapters load the same table.
+      +column_types:
+        team_id: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        team_abbr: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        team_name: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        league: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        division: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
 
 flags:
   send_anonymous_usage_stats: false
