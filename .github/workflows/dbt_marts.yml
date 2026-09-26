@@ -25,9 +25,11 @@ permissions:
   contents: read
 
 concurrency:
-  # event_name keeps a push to master from cancelling a post-refresh check.
-  group: dbt-marts-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Pull requests cancel their own stale runs. Every master run (push,
+  # post-refresh, dispatch) shares one group and is never cancelled, so two
+  # runs cannot publish at once and an upload is never cut off halfway.
+  group: dbt-marts-${{ github.event_name == 'pull_request' && github.ref || 'master' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build:
@@ -58,7 +60,7 @@ jobs:
       # refuses a missing, empty or unexpected mart.
       - name: Export marts to parquet
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
-        run: python export_marts.py target/mlb.duckdb ../marts_out
+        run: python export_marts.py target/mlb.duckdb ../publish/marts
 
       - name: Publish marts to Hugging Face
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/master'
@@ -66,21 +68,18 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          pip install --quiet "huggingface_hub>=0.26"
-          count=0
-          for f in marts_out/*.parquet; do
-            base="$(basename "$f")"
-            hf upload yasumorishima/mlb-stats "$f" "marts/$base" \
-              --repo-type dataset \
-              --commit-message "dbt marts: $base"
-            count=$((count + 1))
-          done
-          if [ "$count" -eq 0 ]; then
+          # `hf` ships with huggingface_hub 0.34.
+          pip install --quiet "huggingface_hub>=0.34"
+          shopt -s nullglob
+          marts=(publish/marts/*.parquet)
+          if [ "${#marts[@]}" -eq 0 ]; then
             echo "no marts exported"
             exit 1
           fi
-          # The card lists the marts as viewer configs, so ship it with them.
-          hf upload yasumorishima/mlb-stats docs/hf_dataset_card.md README.md \
+          # One commit for the marts, their manifest and the card that lists
+          # them, so readers never see a mix of old and new files.
+          cp docs/hf_dataset_card.md publish/README.md
+          hf upload yasumorishima/mlb-stats publish . \
             --repo-type dataset \
-            --commit-message "Update dataset card"
-          echo "Published $count marts"
+            --commit-message "dbt marts ($GITHUB_SHA)"
+          echo "Published ${#marts[@]} marts"

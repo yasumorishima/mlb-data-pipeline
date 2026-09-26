@@ -6,6 +6,9 @@ script fails unless the database holds exactly those tables, each non-empty.
 
 Usage: python export_marts.py <duckdb file> <output dir>
 """
+import datetime
+import json
+import os
 import pathlib
 import sys
 
@@ -37,18 +40,30 @@ def main(db_path: str, out_dir: str) -> int:
         return 1
     out = pathlib.Path(out_dir)
     out.mkdir(parents=True, exist_ok=True)
+    rows = {}
     for name in want:
         n = con.execute(f'select count(*) from "{name}"').fetchone()[0]
         if n == 0:
             print(f"{name} is empty; refusing to publish it")
             return 1
         target = out / f"{name}.parquet"
-        con.execute(f"copy \"{name}\" to '{target.as_posix()}' (format parquet)")
-        back = con.execute(f"select count(*) from '{target.as_posix()}'").fetchone()[0]
+        # COPY takes no bound parameter for its path, so escape it as a literal.
+        literal = target.as_posix().replace("'", "''")
+        con.execute(f"copy \"{name}\" to '{literal}' (format parquet)")
+        back = con.execute("select count(*) from read_parquet(?)", [target.as_posix()]).fetchone()[0]
         if back != n:
             print(f"{target} has {back} rows, expected {n}")
             return 1
         print(f"{name}: {n} rows -> {target}")
+        rows[name] = n
+    # Published next to the marts so a reader can tell how old they are: if a
+    # later build fails its tests, these files stay as they were.
+    manifest = {
+        "built_at_utc": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "git_sha": os.environ.get("GITHUB_SHA", ""),
+        "rows": rows,
+    }
+    (out / "_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return 0
 
 

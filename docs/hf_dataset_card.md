@@ -92,7 +92,9 @@ only and is not part of the weekly refresh.
 Analysis-ready tables built from the tables above by the
 [dbt project](https://github.com/yasumorishima/mlb-data-pipeline/tree/master/dbt)
 and republished after every weekly refresh, only when all of its data tests
-pass. Rows for the season in progress carry `is_partial = true`.
+pass. A build that fails leaves the previous marts in place, so they can lag
+the raw tables: `marts/_manifest.json` records when and from which commit
+they were built. Rows for the season in progress carry `is_partial = true`.
 
 | File | Grain |
 |---|---|
