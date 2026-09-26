@@ -7,9 +7,18 @@
 -- a slider against other sliders. yoy_corr_raw keeps the gap between pitch
 -- types (sliders miss more bats than sinkers), which inflates it.
 --
--- The year-to-year correlation mixes sampling noise with real change in
--- the pitch, so it is a floor on the metric's reliability within a season.
-with a as (
+-- Read it as how well last season's number predicts the next one at this
+-- sample size. It mixes sampling noise, real change in the pitch and range
+-- restriction within the bin (the larger of the two seasons is not binned),
+-- so it is neither a within-season reliability nor a bound on one.
+--
+-- Pairs whose second season is still in progress are left out, so the
+-- table does not move week to week during a season. The 2020 short season
+-- is kept; its pairs sit mostly in the low bins.
+with partial_seasons as (
+    select distinct season from {{ ref("stg_statsapi__pitching") }} where is_partial
+),
+a as (
     select * from {{ ref("mart_pitch_arsenal_scouting") }}
     where pitches >= 100
 ),
@@ -29,6 +38,7 @@ pairs as (
     join long y
       on y.player_id = x.player_id and y.pitch_type = x.pitch_type
      and y.metric = x.metric and y.season = x.season + 1
+    where y.season not in (select season from partial_seasons)
 ),
 binned as (
     select *,

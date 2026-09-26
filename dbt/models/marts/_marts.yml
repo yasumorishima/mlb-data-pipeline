@@ -241,7 +241,9 @@ models:
       Year-to-year correlation of each pitch metric for the same pitcher and
       pitch type, by the smaller of the two seasons' pitch counts. The
       within-type column subtracts the pitch type's season mean first, which
-      is the comparison scouting makes.
+      is the comparison scouting makes. Pairs whose second season is in
+      progress are left out. How well one season predicts the next, not a
+      within-season reliability.
     config:
       contract: {enforced: true}
     data_tests:
@@ -260,7 +262,7 @@ models:
         description: NULL for the open top bin (800 pitches and up).
       - name: n_pairs
         data_type: bigint
-        description: A correlation from fewer than 30 pairs is not published.
+        description: A bin with fewer than 30 pairs fails the build rather than publish a noisy correlation.
         data_tests: [{in_range: {arguments: {min_value: 30}}}]
       - name: yoy_corr_raw
         data_type: double
