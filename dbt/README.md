@@ -42,6 +42,15 @@ so dashboards and models can read them without running dbt.
 
 Besides key uniqueness and value ranges on every mart:
 
+- **Contracts** on every mart (`contract: {enforced: true}` in
+  `models/marts/_marts.yml`): dbt refuses to build a mart whose columns,
+  types or order differ from the declaration, and key columns are NOT NULL.
+  The contract found that `oaa` and `fielding_runs_prevented` were published
+  as DOUBLE (DuckDB types `sum(BIGINT)` as HUGEINT); they are BIGINT now.
+- **Reliability recomputed** (`assert_scouting_reliability_recomputed`): every
+  cell of `mart_scouting_reliability` is computed again another way (group-by
+  means and joins instead of window functions and UNPIVOT) and must match.
+
 - **FIP reconciliation** (`assert_fip_matches_statsapi`): our FIP, with the
   league constant rebuilt from the same table, must equal the Stats API figure
   to 0.001 on every finished season with 20+ IP. As of the 2026-09-23 fetch it
@@ -61,4 +70,7 @@ Besides key uniqueness and value ranges on every mart:
 
 Each of these was checked to fail on a deliberately broken model: wrong FIP
 constant, an unaggregated OAA join that fans out rows, K% over HR, K% over AB,
-and Savant percents left on the 0-100 scale.
+Savant percents left on the 0-100 scale; a renamed column, a changed type,
+a NULL key and the old OAA sum (contracts); and a lost within-type centring,
+a moved bin edge, pairs joined across pitch types and in-progress seasons
+kept (reliability).
