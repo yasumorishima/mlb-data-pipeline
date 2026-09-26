@@ -27,3 +27,6 @@ dbt/target/
 dbt/logs/
 dbt/dbt_packages/
 dbt/.user.yml
+
+# dbt seeds are small reference tables kept in the repo
+!dbt/seeds/*.csv

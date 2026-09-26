@@ -65,12 +65,23 @@ def main(rev: str) -> int:
             current.append(bq.get_table(f"{project}.{dataset}.{name}").description == marker)
         except NotFound:
             current.append(False)
-    if all(current):
-        print(f"{dataset} already holds {marker}; nothing loaded")
-        return 0
-    # Sandbox tables expire after at most 60 days. Set it on every load rather
+    # Sandbox tables expire after at most 60 days. Set it on every run rather
     # than rely on whether a truncating load keeps the old expiry.
     expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=59)
+    expires = expires.replace(microsecond=expires.microsecond // 1000 * 1000)  # BigQuery keeps ms
+    if all(current):
+        # Off-season refreshes can leave the dataset revision unchanged for
+        # months; without this the raw tables would expire under the weekly
+        # build (and the dashboard reading the marts). A metadata update, not
+        # a load, so it costs no storage.
+        for name in names:
+            t = bq.get_table(f"{project}.{dataset}.{name}")
+            t.expires = expires
+            if bq.update_table(t, ["expires"]).expires != expires:
+                print(f"{name}: expiry not moved to {expires}")
+                return 1
+        print(f"{dataset} already holds {marker}; nothing loaded, expiry moved to {expires:%Y-%m-%d}")
+        return 0
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
             path = pathlib.Path(tmp) / f"{name}.parquet"
@@ -87,7 +98,9 @@ def main(rev: str) -> int:
             got = t.num_rows
             # Marked only after the count checks, so a failed run is reloaded.
             t.description, t.expires = marker, expires
-            bq.update_table(t, ["description", "expires"])
+            if bq.update_table(t, ["description", "expires"]).expires != expires:
+                print(f"{table}: expiry not set to {expires}")
+                return 1
             print(f"{name}: {got} rows -> {table}")
     return 0
 

@@ -1,0 +1,31 @@
+team_id,team_abbr,team_name,league,division
+108,LAA,Los Angeles Angels,AL,AL West
+109,AZ,Arizona Diamondbacks,NL,NL West
+110,BAL,Baltimore Orioles,AL,AL East
+111,BOS,Boston Red Sox,AL,AL East
+112,CHC,Chicago Cubs,NL,NL Central
+113,CIN,Cincinnati Reds,NL,NL Central
+114,CLE,Cleveland Guardians,AL,AL Central
+115,COL,Colorado Rockies,NL,NL West
+116,DET,Detroit Tigers,AL,AL Central
+117,HOU,Houston Astros,AL,AL West
+118,KC,Kansas City Royals,AL,AL Central
+119,LAD,Los Angeles Dodgers,NL,NL West
+120,WSH,Washington Nationals,NL,NL East
+121,NYM,New York Mets,NL,NL East
+133,ATH,Athletics,AL,AL West
+134,PIT,Pittsburgh Pirates,NL,NL Central
+135,SD,San Diego Padres,NL,NL West
+136,SEA,Seattle Mariners,AL,AL West
+137,SF,San Francisco Giants,NL,NL West
+138,STL,St. Louis Cardinals,NL,NL Central
+139,TB,Tampa Bay Rays,AL,AL East
+140,TEX,Texas Rangers,AL,AL West
+141,TOR,Toronto Blue Jays,AL,AL East
+142,MIN,Minnesota Twins,AL,AL Central
+143,PHI,Philadelphia Phillies,NL,NL East
+144,ATL,Atlanta Braves,NL,NL East
+145,CWS,Chicago White Sox,AL,AL Central
+146,MIA,Miami Marlins,NL,NL East
+147,NYY,New York Yankees,AL,AL East
+158,MIL,Milwaukee Brewers,NL,NL Central

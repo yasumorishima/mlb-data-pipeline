@@ -66,9 +66,12 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
           echo "reading yasumorishima/mlb-stats@$sha"
 
+      # The dashboard tables (models/bi) are built after the publish below,
+      # so a dashboard-only failure (a new franchise id missing from the
+      # seed, say) never holds back marts that passed their own tests.
       - name: dbt build (models + tests)
         run: >-
-          dbt build --profiles-dir .
+          dbt build --profiles-dir . --exclude path:models/bi
           --vars '{raw_base: "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/${{ steps.rev.outputs.sha }}"}'
 
       # Publish only from master, and only after every model and data test
@@ -102,6 +105,14 @@ jobs:
             --repo-type dataset \
             --commit-message "dbt marts ($GITHUB_SHA)"
           echo "Published ${#marts[@]} marts"
+
+      # Runs on pull requests too, so a change to the dashboard tables is
+      # tested before merge. A failure here fails the job (and skips the
+      # BigQuery job) after the marts are already published.
+      - name: dbt build dashboard tables (models/bi + tests)
+        run: >-
+          dbt build --profiles-dir . --select path:models/bi
+          --vars '{raw_base: "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/${{ steps.rev.outputs.sha }}"}'
 
   # The same models on BigQuery, in a sandbox project with no billing account
   # (free: 10 GB storage, 1 TB queries a month; tables expire after 60 days,

@@ -1,0 +1,232 @@
+version: 2
+
+# Tables for the BI dashboard (Looker Studio reads them from the BigQuery
+# sandbox). Contracts as for the marts: the dashboard's fields are bound to
+# these column names and types.
+
+models:
+  - name: bi_batter_season
+    description: >
+      Dashboard table for batters (one row per batter-season): the columns a
+      scout or coach reads, the franchise's current name, and season
+      percentiles where 100 is the best end. Percentiles are among batters
+      with PA >= 40% of the season's PA leader.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - {unique_combination: {arguments: {columns: [player_id, season]}}}
+    columns:
+      - name: player_id
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: season
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: player_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        data_tests: [not_null]
+      - name: team_abbr
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        data_tests: [not_null]
+      - name: team_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: league
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: division
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: primary_position
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: age
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: games
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: pa
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: avg
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: obp
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: slg
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: woba
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: xwoba
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: woba_minus_xwoba
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: wrc_plus
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: war
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: k_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: bb_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: iso
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: avg_bat_speed
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: sprint_speed
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: oaa
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: is_partial
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
+      - name: pctile_qualified
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
+        data_tests: [not_null]
+      - name: woba_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: xwoba_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: wrc_plus_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: k_rate_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: bb_rate_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: iso_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: bat_speed_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: sprint_speed_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: oaa_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+  - name: bi_pitcher_season
+    description: >
+      Dashboard table for pitchers (one row per pitcher-season), SP/RP role,
+      and season percentiles where 100 is the best end. Percentiles are among
+      pitchers with BF >= 30% of the season's BF leader.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - {unique_combination: {arguments: {columns: [player_id, season]}}}
+    columns:
+      - name: player_id
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: season
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: player_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        data_tests: [not_null]
+      - name: team_abbr
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        data_tests: [not_null]
+      - name: team_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: league
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: division
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: role
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: age
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: games
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: games_started
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: ip
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: bf
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: era
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: fip
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: xera
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: era_minus_xera
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: k_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: bb_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: k_minus_bb_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: xwoba_allowed
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: primary_pitch_type
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: war
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: is_partial
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
+      - name: pctile_qualified
+        data_type: "{{ 'bool' if target.type == 'bigquery' else 'boolean' }}"
+        data_tests: [not_null]
+      - name: k_rate_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: bb_rate_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: k_minus_bb_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: fip_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: xera_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: xwoba_allowed_pctile
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+  - name: bi_pitch_arsenal
+    description: >
+      Pitch-level scouting rows with the pitcher's name and team; within-type
+      percentiles on a 0-100 scale (NULL below 100 pitches).
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - {unique_combination: {arguments: {columns: [player_id, season, pitch_type]}}}
+    columns:
+      - name: player_id
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: season
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: player_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        data_tests: [not_null]
+      - name: team_abbr
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: pitch_type
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: pitch_name
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: pitches
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: usage
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: usage_rank
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: run_value_per_100
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: whiff_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: xwoba_allowed
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: hard_hit_rate
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: whiff_pctile_in_type
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+      - name: rv100_pctile_in_type
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
