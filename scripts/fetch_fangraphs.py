@@ -25,6 +25,7 @@ import pandas as pd
 import pybaseball as pb
 
 from config import (
+    mark_failed_validation,
     DATA_DIR,
     DATA_TARGET,
     END_SEASON,
@@ -214,35 +215,50 @@ def main():
         plus_df = fetch_pitcher_plus(2020, args.end_year)
         _log_elapsed("FanGraphs pitcher plus", t0)
 
-    # Validate before upload
+    # Validate before upload (the verdict is enforced, not just printed)
     yr_range = (args.start_year, args.end_year)
+    failed = []
     if len(bat_df) > 0:
-        validate_dataframe(bat_df, "fg_batting", expected_years=yr_range,
-                           required_cols=["player_id", "season", "wOBA", "OPS", "WAR"])
+        if not validate_dataframe(bat_df, "fg_batting", expected_years=yr_range,
+                           required_cols=["player_id", "season", "wOBA", "OPS", "WAR"]):
+            failed.append("fg_batting")
     if len(pit_df) > 0:
-        validate_dataframe(pit_df, "fg_pitching", expected_years=yr_range,
-                           required_cols=["player_id", "season", "ERA", "FIP", "WAR"])
+        if not validate_dataframe(pit_df, "fg_pitching", expected_years=yr_range,
+                           required_cols=["player_id", "season", "ERA", "FIP", "WAR"]):
+            failed.append("fg_pitching")
     if len(plus_df) > 0:
-        validate_dataframe(plus_df, "fg_pitcher_plus",
+        if not validate_dataframe(plus_df, "fg_pitcher_plus",
                            expected_years=(max(2020, args.start_year), args.end_year),
-                           required_cols=["player_id", "season", "Stuff+", "Location+"])
+                           required_cols=["player_id", "season", "Stuff+", "Location+"]):
+            failed.append("fg_pitcher_plus")
+
+    # Mark refusals before writing anything: if a write below raises, the
+    # audit must still see which tables failed validation.
+    for table in failed:
+        mark_failed_validation(table)
 
     if not args.no_bq:
-        if len(bat_df) > 0:
+        if len(bat_df) > 0 and "fg_batting" not in failed:
             write_dataframe(bat_df, "fg_batting")
             if DATA_TARGET == "bq":
                 validate_bq_table("fg_batting")
-        if len(pit_df) > 0:
+        if len(pit_df) > 0 and "fg_pitching" not in failed:
             write_dataframe(pit_df, "fg_pitching")
             if DATA_TARGET == "bq":
                 validate_bq_table("fg_pitching")
-        if len(plus_df) > 0:
+        if len(plus_df) > 0 and "fg_pitcher_plus" not in failed:
             write_dataframe(plus_df, "fg_pitcher_plus")
             if DATA_TARGET == "bq":
                 validate_bq_table("fg_pitcher_plus")
 
     _log_elapsed("FanGraphs total", t0)
     print("\nFanGraphs fetch complete.")
+    # Exit non-zero only after the tables that passed were written, so
+    # one bad table does not cost the week for the others.
+    if failed:
+        print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
+              "above). Not written, so the previous copy stays published.")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

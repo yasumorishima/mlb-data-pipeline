@@ -30,6 +30,7 @@ import time
 import pandas as pd
 
 from config import (
+    mark_failed_validation,
     DATA_DIR,
     DATA_TARGET,
     END_SEASON,
@@ -95,6 +96,7 @@ def main():
                             expected_years=(args.start_year, args.end_year),
                             required_cols=["season", "team", "pf_1yr", "pf_3yr"])
     if not ok:
+        mark_failed_validation("park_factors")
         print("ERROR: park_factors failed validation (see the warnings "
               "above). Refusing to publish it over the previous copy.")
         raise SystemExit(1)

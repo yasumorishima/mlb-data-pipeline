@@ -163,6 +163,22 @@ def get_bq_client():
 # =====================================================================
 # Data quality validation
 # =====================================================================
+# A fetch script that refuses a table leaves a marker here, so the audit
+# (scripts/check_outputs.py) can tell "failed validation" apart from
+# "not produced". Without it a declared-unreachable table (FanGraphs)
+# that came back and failed validation would be excused, and the run
+# would end green. A dot directory: nothing that scans PARQUET_ROOT for
+# tables reads it.
+FAILED_VALIDATION_DIRNAME = ".failed_validation"
+
+
+def mark_failed_validation(table_name: str) -> None:
+    d = PARQUET_ROOT / FAILED_VALIDATION_DIRNAME
+    d.mkdir(parents=True, exist_ok=True)
+    (d / table_name).write_text(
+        "failed validate_dataframe; not written\n", encoding="utf-8")
+
+
 def validate_dataframe(
     df: pd.DataFrame,
     table_name: str,
@@ -344,6 +360,10 @@ def write_dataframe(
         df.to_parquet(out_path, index=False)
         size_mb = out_path.stat().st_size / 1024**2
         print(f"  Parquet: {out_path.name} ({len(df):,} rows, {size_mb:.1f} MB)")
+        # A good write supersedes an earlier refusal. CI starts clean, but a
+        # persistent root (run_backfill) would otherwise keep failing the
+        # audit on a marker from some past run.
+        (PARQUET_ROOT / FAILED_VALIDATION_DIRNAME / table_name).unlink(missing_ok=True)
         return
 
     # BQ mode
