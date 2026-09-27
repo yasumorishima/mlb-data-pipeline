@@ -33,6 +33,7 @@ import pandas as pd
 import pybaseball as pb
 
 from config import (
+    mark_failed_validation,
     DATA_DIR,
     DATA_TARGET,
     END_SEASON,
@@ -286,6 +287,8 @@ def main():
     # Exit non-zero only after the tables that passed were written, so
     # one bad table does not cost the week for the others.
     if failed:
+        for table in failed:
+            mark_failed_validation(table)
         print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
               "above). Not written, so the previous copy stays published.")
         raise SystemExit(1)

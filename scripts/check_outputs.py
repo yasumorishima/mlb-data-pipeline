@@ -35,7 +35,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from config import PARQUET_ROOT  # noqa: E402
+from config import FAILED_VALIDATION_DIRNAME, PARQUET_ROOT  # noqa: E402
 
 # Which fetch step is responsible for which table. tests/test_check_outputs.py
 # reads the fetch scripts and fails if one writes a table missing from here.
@@ -281,6 +281,14 @@ def main() -> int:
         for table in STEP_TABLES[step]:
             files = _files_for(table)
             reason = KNOWN_UNREACHABLE.get(table)
+
+            # Checked before the unreachable excuse: that covers "the
+            # source refused us", not "the data came back wrong".
+            if (PARQUET_ROOT / FAILED_VALIDATION_DIRNAME / table).exists():
+                missing.append(table)
+                lines.append(f"| {table} | **FAILED VALIDATION** | "
+                             f"step `{step}` refused to write it |")
+                continue
 
             if not files:
                 if reason:

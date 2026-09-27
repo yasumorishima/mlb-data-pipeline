@@ -76,7 +76,9 @@ def _reset() -> None:
 
 def _written() -> list[str]:
     root = _TMP / "pq"
-    return sorted(p.name for p in root.iterdir()) if root.exists() else []
+    # Tables only: the failed-validation markers live in a dot directory.
+    return (sorted(p.name for p in root.iterdir() if not p.name.startswith("."))
+            if root.exists() else [])
 
 
 def _run(mod, argv: list[str]):
@@ -217,6 +219,73 @@ def test_every_fetch_step_runs_unless_cancelled():
         m = re.search(r"^        if: (.+)$", body, re.M)
         assert m, f"{name}: no if:"
         assert "!cancelled()" in m.group(1), f"{name}: {m.group(1)}"
+
+
+
+# ---------------------------------------------------------------- Markers + audit
+def _marked() -> list[str]:
+    d = _TMP / "pq" / config.FAILED_VALIDATION_DIRNAME
+    return sorted(p.name for p in d.iterdir()) if d.exists() else []
+
+
+def test_failed_tables_leave_a_marker_and_passing_ones_do_not():
+    _run_fangraphs(2019)
+    assert _marked() == ["fg_batting"], _marked()
+    _run_fielding({"catcher": 2020})
+    assert _marked() == ["catcher"], _marked()
+    _run_savant({**_SV_REAL_FIRST, "sc_batter_expected": 2018})
+    assert _marked() == ["sc_batter_expected"], _marked()
+    _run_savant(dict(_SV_REAL_FIRST))
+    assert _marked() == [], _marked()
+
+
+def _audit(root: Path, steps: str):
+    import check_outputs as C
+    original = C.PARQUET_ROOT
+    argv = sys.argv
+    ok_list = root.parent / "ok_tables.txt"
+    C.PARQUET_ROOT = root
+    sys.argv = ["check_outputs.py", "--steps", steps, "--ok-list", str(ok_list)]
+    try:
+        rc = C.main()
+    finally:
+        sys.argv = argv
+        C.PARQUET_ROOT = original
+    return rc, ok_list.read_text(encoding="utf-8").split()
+
+
+def test_audit_does_not_excuse_an_unreachable_table_that_failed_validation():
+    # FanGraphs tables are declared unreachable: "no file" is excused.
+    root = _TMP / "audit" / "pq"
+    shutil.rmtree(root.parent, ignore_errors=True)
+    root.mkdir(parents=True)
+    rc, ok = _audit(root, "fangraphs")
+    assert rc == 0 and ok == [], (rc, ok)
+    # The same "no file", but because fetch_fangraphs refused it.
+    (root / config.FAILED_VALIDATION_DIRNAME).mkdir()
+    (root / config.FAILED_VALIDATION_DIRNAME / "fg_batting").write_text("x")
+    rc, ok = _audit(root, "fangraphs")
+    assert rc == 1 and ok == [], (rc, ok)
+
+
+def test_fielding_only_flag_does_not_write_a_stale_csv():
+    _reset()
+    # Left over from an earlier local run; this run never validates it.
+    _frame(2015, 2016, {"sprint_speed": 27.0}).to_csv(DATA / "sprint_speed.csv", index=False)
+    saved = fr.fetch_oaa
+
+    def oaa(start, end):
+        _frame(max(2016, start), end).to_csv(DATA / "oaa.csv", index=False)
+        (_frame(max(2016, start), end, {"team_name": "X", "total_oaa": 1})
+         .drop(columns="player_id").to_csv(DATA / "oaa_team.csv", index=False))
+
+    try:
+        fr.fetch_oaa = oaa
+        rc = _run(fr, ["--start-year", "2015", "--end-year", "2026", "--oaa-only"])
+    finally:
+        fr.fetch_oaa = saved
+    assert rc in (0, None), rc
+    assert _written() == ["oaa", "oaa_team"], _written()
 
 
 if __name__ == "__main__":

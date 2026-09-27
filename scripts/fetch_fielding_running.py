@@ -26,6 +26,7 @@ from pathlib import Path
 import pandas as pd
 
 from config import (
+    mark_failed_validation,
     DATA_DIR,
     DATA_TARGET,
     END_SEASON,
@@ -237,10 +238,13 @@ def fetch_catcher(start=START_SEASON, end=END_SEASON) -> pd.DataFrame:
 # =====================================================================
 # BQ upload
 # =====================================================================
-def write_all_tables(skip=frozenset()):
+def write_all_tables(skip=frozenset(), only=None):
     """Write all fielding/running tables to the configured target (BQ or Parquet).
 
-    Tables named in ``skip`` failed validation and are not written.
+    Tables named in ``skip`` failed validation and are not written. When
+    ``only`` is given, tables outside it are not written either: with an
+    ``--*-only`` flag an older CSV of another table can still sit in
+    DATA_DIR, and this run never validated it.
     """
     table_map = {
         "sprint_speed.csv": "sprint_speed",
@@ -251,6 +255,8 @@ def write_all_tables(skip=frozenset()):
     for csv_name, table_name in table_map.items():
         if table_name in skip:
             print(f"  SKIP: {table_name} failed validation")
+            continue
+        if only is not None and table_name not in only:
             continue
         path = DATA_DIR / csv_name
         if not path.exists():
@@ -291,10 +297,12 @@ def main():
     # verdict and publishes the table anyway)
     yr_range = (args.start_year, args.end_year)
     failed = []
+    checked = set()
     if run_all or args.sprint_only:
         sprint_csv = DATA_DIR / "sprint_speed.csv"
         if sprint_csv.exists():
             _df = pd.read_csv(sprint_csv)
+            checked.add("sprint_speed")
             if not validate_dataframe(_df, "sprint_speed",
                                expected_years=(max(2015, yr_range[0]), yr_range[1]),
                                required_cols=["player_id", "season", "sprint_speed"]):
@@ -303,6 +311,7 @@ def main():
         oaa_csv = DATA_DIR / "oaa.csv"
         if oaa_csv.exists():
             _df = pd.read_csv(oaa_csv)
+            checked.add("oaa")
             if not validate_dataframe(_df, "oaa",
                                expected_years=(max(2016, yr_range[0]), yr_range[1]),
                                required_cols=["player_id", "season"]):
@@ -310,6 +319,7 @@ def main():
         team_csv = DATA_DIR / "oaa_team.csv"
         if team_csv.exists():
             _df = pd.read_csv(team_csv)
+            checked.add("oaa_team")
             if not validate_dataframe(_df, "oaa_team",
                                expected_years=(max(2016, yr_range[0]), yr_range[1]),
                                required_cols=["team_name", "season", "total_oaa"]):
@@ -318,13 +328,14 @@ def main():
         catch_csv = DATA_DIR / "catcher.csv"
         if catch_csv.exists():
             _df = pd.read_csv(catch_csv)
+            checked.add("catcher")
             if not validate_dataframe(_df, "catcher",
                                expected_years=(max(2015, yr_range[0]), yr_range[1]),
                                required_cols=["player_id", "season"]):
                 failed.append("catcher")
 
     if not args.no_bq:
-        write_all_tables(skip=set(failed))
+        write_all_tables(skip=set(failed), only=checked)
         if DATA_TARGET == "bq":
             for tn in ["sprint_speed", "oaa", "oaa_team", "catcher"]:
                 try:
@@ -337,6 +348,8 @@ def main():
     # Exit non-zero only after the tables that passed were written, so
     # one bad table does not cost the week for the others.
     if failed:
+        for table in failed:
+            mark_failed_validation(table)
         print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
               "above). Not written, so the previous copy stays published.")
         raise SystemExit(1)
