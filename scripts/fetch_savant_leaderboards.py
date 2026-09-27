@@ -208,9 +208,15 @@ TABLE_MAP = {
 }
 
 
-def write_all_tables():
-    """Write all Savant leaderboard CSVs to the configured target (BQ or Parquet)."""
+def write_all_tables(skip=frozenset()):
+    """Write all Savant leaderboard CSVs to the configured target (BQ or Parquet).
+
+    Tables named in ``skip`` failed validation and are not written.
+    """
     for csv_name, table_name in TABLE_MAP.items():
+        if table_name in skip:
+            print(f"  SKIP: {table_name} failed validation")
+            continue
         path = DATA_DIR / csv_name
         if not path.exists():
             print(f"  SKIP: {csv_name} not found")
@@ -250,16 +256,24 @@ def main():
     results["sc_batted_ball"] = fetch_batted_ball(args.start_year, args.end_year)
     _log_elapsed("batted_ball", t0)
 
-    # Validate all fetched data
-    yr = (args.start_year, args.end_year)
+    # Validate all fetched data. validate_dataframe returns a bool and
+    # prints its verdict; a bare call lets a table that lost seasons or
+    # columns overwrite the published copy and still exit 0.
+    # First season each leaderboard has on Savant: bat tracking starts in
+    # 2024 and pitch arsenal stats in 2017 (2015 and 2016 return only the
+    # CSV header), so asking them for 2015 would fail every run.
+    first_season = {"sc_bat_tracking": 2024, "sc_pitcher_arsenal": 2017}
+    failed = []
     for table_name, df in results.items():
         if len(df) == 0:
             continue
-        yr_range = (2024, args.end_year) if table_name == "sc_bat_tracking" else yr
-        validate_dataframe(df, table_name, expected_years=yr_range)
+        yr_range = (max(first_season.get(table_name, args.start_year),
+                        args.start_year), args.end_year)
+        if not validate_dataframe(df, table_name, expected_years=yr_range):
+            failed.append(table_name)
 
     if not args.no_bq:
-        write_all_tables()
+        write_all_tables(skip=set(failed))
         if DATA_TARGET == "bq":
             for table_name in TABLE_MAP.values():
                 try:
@@ -269,6 +283,12 @@ def main():
 
     _log_elapsed("Savant leaderboards total", t0)
     print("\nSavant leaderboards fetch complete.")
+    # Exit non-zero only after the tables that passed were written, so
+    # one bad table does not cost the week for the others.
+    if failed:
+        print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
+              "above). Not written, so the previous copy stays published.")
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

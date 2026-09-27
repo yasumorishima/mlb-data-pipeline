@@ -124,12 +124,16 @@ jobs:
           echo "end_year=$END_YEAR" >> $GITHUB_OUTPUT
           echo "End year: $END_YEAR"
 
+      # Every fetch step below runs under !cancelled(): with the implicit
+      # success() a failed fetch (say, one table failing validation) would
+      # skip every fetch after it and cost the week for tables that were
+      # fine. The audit and upload steps decide what gets published.
       # ================================================================
       # FanGraphs (batting + pitching + pitcher plus)
       # continue-on-error: FanGraphs 403s datacenter IPs (see header note)
       # ================================================================
       - name: Fetch FanGraphs
-        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fangraphs')) }}
         continue-on-error: true
         working-directory: scripts
         run: |
@@ -141,7 +145,7 @@ jobs:
       # Savant leaderboards (exit velo, expected, bat tracking, etc.)
       # ================================================================
       - name: Fetch Savant leaderboards
-        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'savant')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'savant')) }}
         working-directory: scripts
         run: |
           python fetch_savant_leaderboards.py \
@@ -152,7 +156,7 @@ jobs:
       # Fielding + running (sprint speed, OAA, catcher)
       # ================================================================
       - name: Fetch fielding/running
-        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fielding')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'fielding')) }}
         working-directory: scripts
         run: |
           python fetch_fielding_running.py \
@@ -166,7 +170,7 @@ jobs:
       # excused, park_factors never reached the dataset at all.
       # ================================================================
       - name: Fetch park factors
-        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'park')) }}
         working-directory: scripts
         run: |
           python fetch_park_factors.py \
@@ -181,7 +185,7 @@ jobs:
       # Its tests run first so a broken gate cannot publish.
       # ================================================================
       - name: Fetch MLB Stats API
-        if: contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'statsapi')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'all') || contains(steps.steps.outputs.steps, 'statsapi')) }}
         working-directory: scripts
         env:
           ALLOW_SHRINK: ${{ inputs.allow_statsapi_shrink }}
@@ -199,7 +203,7 @@ jobs:
       # Statcast pitch-level data (heavy - manual trigger only)
       # ================================================================
       - name: Fetch Statcast pitches
-        if: contains(steps.steps.outputs.steps, 'statcast')
+        if: ${{ !cancelled() && (contains(steps.steps.outputs.steps, 'statcast')) }}
         working-directory: scripts
         run: |
           python fetch_statcast_pitches.py \
@@ -227,7 +231,9 @@ jobs:
       - name: Test the output audit
         id: audit_tests
         if: always()
-        run: python tests/test_check_outputs.py
+        run: |
+          python tests/test_check_outputs.py
+          python tests/test_fetch_validation.py
 
       - name: Audit outputs
         id: audit
