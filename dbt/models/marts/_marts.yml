@@ -267,3 +267,38 @@ models:
       - name: yoy_corr_within_type
         data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+
+  - name: mart_batter_process_reliability
+    description: >
+      Year-to-year correlation of each batting number for the same batter
+      (yoy_corr), and its correlation with the batter's wOBA the next season
+      (next_woba_corr), by the smaller of the two seasons' PA. Both seasons
+      need 100 PA or more. Pairs whose second season is in progress are left
+      out. How well one season predicts the next, not a within-season
+      reliability.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination: {arguments: {columns: [metric, min_pa_lo]}}
+    columns:
+      - name: metric
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [woba, xwoba, woba_minus_xwoba, babip, k_rate, bb_rate, iso]}}}]
+      - name: min_pa_lo
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [100, 200, 400, 600], quote: false}}}]
+      - name: min_pa_hi
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        description: NULL for the open top bin (600 PA and up).
+      - name: n_pairs
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        description: A bin with fewer than 30 pairs fails the build rather than publish a noisy correlation.
+        data_tests: [{in_range: {arguments: {min_value: 30}}}]
+      - name: yoy_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+      - name: next_woba_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]

@@ -78,7 +78,7 @@ Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `stat
 |---------|--------|-------------|
 | [baseball-mlops](https://github.com/yasumorishima/baseball-mlops) | Weekly Retrain 停止中 | fg_batting, fg_pitching, sc_*, sprint_speed, park_factors |
 | [mlb-win-probability](https://github.com/yasumorishima/mlb-win-probability) | Cloud Run 削除済 | statcast_pitches, fg_batting, fg_pitching, sprint_speed, oaa_team, catcher, park_factors |
-| [dbt marts](dbt/) | 稼働中（CI で毎週 build） | statsapi_*, sc_*, sprint_speed, oaa → 分析用マート 5 本（選手評価・年齢曲線入力・球種スカウティング・指標の翌年への持ち越し）。全マートに契約（列名と型を強制）。同じ SQL を BigQuery sandbox（課金アカウントなし）でも build し、全テスト通過・DuckDB と全セル一致（浮動小数は 1e-15 以内）。ダッシュボード用の表 3 本（`models/bi/`：球団名とシーズン内パーセンタイル付きの打者・投手・球種）を Looker Studio が sandbox から直接読む |
+| [dbt marts](dbt/) | 稼働中（CI で毎週 build） | statsapi_*, sc_*, sprint_speed, oaa → 分析用マート 6 本（選手評価・年齢曲線入力・球種スカウティング・指標の翌年への持ち越し〈球種・打者の結果と過程〉）。全マートに契約（列名と型を強制）。同じ SQL を BigQuery sandbox（課金アカウントなし）でも build し、全テスト通過・DuckDB と全セル一致（浮動小数は 2e-15 以内）。ダッシュボード用の表 3 本（`models/bi/`：球団名とシーズン内パーセンタイル付きの打者・投手・球種）を Looker Studio が sandbox から直接読む |
 
 読み取り側は HF Dataset 参照（`hf_hub_download` / `pandas.read_parquet` + HF URL）を前提に再設計する。
 
