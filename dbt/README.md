@@ -33,7 +33,7 @@ cell (text and integers exactly, floats within 2e-15).
 | `bi_pitcher_season` | pitcher-season | Team, SP/RP role (SP when at least half the games were starts), percentiles for K%, BB%, K-BB%, FIP, xERA, xwOBA allowed among pitchers with BF >= 30% of the leader (about 250 BF, so full-time relievers are ranked). |
 | `bi_pitch_arsenal` | pitcher-season-pitch | The pitcher's name and team; the mart's within-type percentiles on the same 0-100 scale. |
 
-The dashboard: [MLB Scouting Dashboard](https://lookerstudio.google.com/reporting/9c1d9fa2-c796-45a0-85de-633a888c4fd9) (Looker Studio, viewable by anyone with the link; pages Batters, Pitchers and Pitch arsenal; season 2025 by default). The same three tables, exported to CSV, also back a [Tableau Public version](https://public.tableau.com/app/profile/y.m7878/viz/MLBScoutingDashboard/Batters) (a snapshot as of 2026-09-27, since Tableau Public web authoring reads uploaded files and has no BigQuery connector).
+The dashboard: [MLB Scouting Dashboard](https://lookerstudio.google.com/reporting/9c1d9fa2-c796-45a0-85de-633a888c4fd9) (Looker Studio, viewable by anyone with the link; pages Batters, Pitchers and Pitch arsenal; season 2025 by default). The same three tables, exported to CSV, also back a [Tableau Public version](https://public.tableau.com/app/profile/y.m7878/viz/MLBScoutingDashboard/1) (one page with all three tables and a single season selector) (a snapshot as of 2026-09-27, since Tableau Public web authoring reads uploaded files and has no BigQuery connector).
 
 ## Run it
 
