@@ -288,6 +288,36 @@ def test_fielding_only_flag_does_not_write_a_stale_csv():
     assert _written() == ["oaa", "oaa_team"], _written()
 
 
+
+def test_a_good_write_clears_a_stale_marker():
+    # A persistent root (run_backfill) keeps markers between runs.
+    _reset()
+    config.mark_failed_validation("oaa")
+    config.mark_failed_validation("catcher")
+    config.write_dataframe(_frame(2016, 2017), "oaa")
+    assert _marked() == ["catcher"], _marked()
+
+
+
+def test_marker_survives_a_write_that_raises():
+    # FanGraphs is continue-on-error and declared unreachable: if a write
+    # raised before the marker was left, the refused table would be excused.
+    saved = fg.write_dataframe
+
+    def boom(df, table, *a, **k):
+        raise RuntimeError("disk full")
+
+    try:
+        fg.write_dataframe = boom
+        try:
+            _run_fangraphs(2019)
+        except RuntimeError:
+            pass
+    finally:
+        fg.write_dataframe = saved
+    assert _marked() == ["fg_batting"], _marked()
+
+
 if __name__ == "__main__":
     tests = [(n, f) for n, f in sorted(globals().items())
              if n.startswith("test_") and callable(f)]

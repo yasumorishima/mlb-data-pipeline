@@ -334,6 +334,11 @@ def main():
                                required_cols=["player_id", "season"]):
                 failed.append("catcher")
 
+    # Mark refusals before writing anything: if a write below raises, the
+    # audit must still see which tables failed validation.
+    for table in failed:
+        mark_failed_validation(table)
+
     if not args.no_bq:
         write_all_tables(skip=set(failed), only=checked)
         if DATA_TARGET == "bq":
@@ -348,8 +353,6 @@ def main():
     # Exit non-zero only after the tables that passed were written, so
     # one bad table does not cost the week for the others.
     if failed:
-        for table in failed:
-            mark_failed_validation(table)
         print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
               "above). Not written, so the previous copy stays published.")
         raise SystemExit(1)

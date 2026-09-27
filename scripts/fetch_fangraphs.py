@@ -232,6 +232,11 @@ def main():
                            required_cols=["player_id", "season", "Stuff+", "Location+"]):
             failed.append("fg_pitcher_plus")
 
+    # Mark refusals before writing anything: if a write below raises, the
+    # audit must still see which tables failed validation.
+    for table in failed:
+        mark_failed_validation(table)
+
     if not args.no_bq:
         if len(bat_df) > 0 and "fg_batting" not in failed:
             write_dataframe(bat_df, "fg_batting")
@@ -251,8 +256,6 @@ def main():
     # Exit non-zero only after the tables that passed were written, so
     # one bad table does not cost the week for the others.
     if failed:
-        for table in failed:
-            mark_failed_validation(table)
         print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
               "above). Not written, so the previous copy stays published.")
         raise SystemExit(1)

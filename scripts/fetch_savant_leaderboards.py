@@ -273,6 +273,11 @@ def main():
         if not validate_dataframe(df, table_name, expected_years=yr_range):
             failed.append(table_name)
 
+    # Mark refusals before writing anything: if a write below raises, the
+    # audit must still see which tables failed validation.
+    for table in failed:
+        mark_failed_validation(table)
+
     if not args.no_bq:
         write_all_tables(skip=set(failed))
         if DATA_TARGET == "bq":
@@ -287,8 +292,6 @@ def main():
     # Exit non-zero only after the tables that passed were written, so
     # one bad table does not cost the week for the others.
     if failed:
-        for table in failed:
-            mark_failed_validation(table)
         print(f"ERROR: {', '.join(failed)} failed validation (see the warnings "
               "above). Not written, so the previous copy stays published.")
         raise SystemExit(1)

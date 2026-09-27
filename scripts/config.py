@@ -360,6 +360,10 @@ def write_dataframe(
         df.to_parquet(out_path, index=False)
         size_mb = out_path.stat().st_size / 1024**2
         print(f"  Parquet: {out_path.name} ({len(df):,} rows, {size_mb:.1f} MB)")
+        # A good write supersedes an earlier refusal. CI starts clean, but a
+        # persistent root (run_backfill) would otherwise keep failing the
+        # audit on a marker from some past run.
+        (PARQUET_ROOT / FAILED_VALIDATION_DIRNAME / table_name).unlink(missing_ok=True)
         return
 
     # BQ mode
