@@ -6,7 +6,7 @@ dbt-core + DuckDB, so it runs anywhere for free: DuckDB reads the parquet over
 HTTPS and nothing has to be downloaded or loaded first. The same SQL also
 builds on BigQuery (see [BigQuery](#bigquery-sandbox)); every model and test
 passes on both (with the same one warning), and the two builds agree on every
-cell (text and integers exactly, floats within 1e-15).
+cell (text and integers exactly, floats within 2e-15).
 
 ## Layers
 
@@ -25,6 +25,7 @@ cell (text and integers exactly, floats within 1e-15).
 | `mart_batter_aging_pairs` | batter, season and season + 1 | Input for aging / development curves (delta method or a hierarchical model), weighted by the harmonic mean of PA. |
 | `mart_pitch_arsenal_scouting` | pitcher-season-pitch | Usage rank plus whiff and run-value percentiles within the same pitch type and season. |
 | `mart_scouting_reliability` | metric x sample-size bin | Year-to-year correlation of each pitch metric for the same pitcher and pitch type, raw and within pitch type: how far a one-season number can be trusted. |
+| `mart_batter_process_reliability` | metric x PA bin | For the same batter in consecutive seasons: how much wOBA, xwOBA, their gap, BABIP, K%, BB% and ISO carry over, and how well each predicts next season's wOBA. |
 
 | BI table | Grain | Adds to the mart |
 | --- | --- | --- |
@@ -90,6 +91,35 @@ What had to change so one set of SQL runs on both engines:
 | `accepted_values: [100, 200, ...]` | same, with `quote: false` | BigQuery will not compare INT64 with a string |
 | contract `data_type: double` | `float64` on BigQuery, `double` on DuckDB | the contract types are adapter-specific |
 
+## Result vs process for batters
+
+`mart_batter_process_reliability` (build of 2026-09-27): pairs of consecutive
+finished seasons 2015-2025 with 100+ PA in each. The 60-game 2020 season is
+kept; its pairs sit mostly in the low bins. Correlations, same batter:
+
+| smaller PA of the pair | pairs | wOBA with next wOBA | xwOBA with next xwOBA | wOBA - xwOBA with next gap | xwOBA with next wOBA |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 100-199 | 974 | 0.23 | 0.42 | 0.09 | 0.29 |
+| 200-399 | 1,239 | 0.32 | 0.54 | 0.19 | 0.40 |
+| 400-599 | 811 | 0.44 | 0.66 | 0.37 | 0.47 |
+| 600+ | 322 | 0.53 | 0.66 | 0.33 | 0.53 |
+
+- xwOBA repeats better than wOBA at every sample size, and predicts next
+  season's wOBA better than wOBA itself up to 600 PA, where the two tie.
+- Part of the gap repeats (correlation 0.33 to 0.37 with 400+ PA in both
+  seasons), so xwOBA misses something stable about a batter. Among the traits
+  in the mart, with 400+ PA (2,078 seasons), sprint speed goes with the gap
+  the most (r = 0.21; pull-air rate 0.03). Bat speed, measured only since
+  2023 (409 seasons), is as large with the opposite sign (-0.20).
+- A held-out check: weights fitted on pairs starting 2015-2022 and scored on
+  pairs starting 2023 and 2024 (509 pairs, 335 batters, 300+ PA the next
+  season); fit and error both weighted by next season's PA; MAE of next
+  season's wOBA. Last wOBA 0.02454, last xwOBA 0.02380, both 0.02371 (about
+  70 % of the weight on xwOBA), a constant 0.02768. xwOBA minus wOBA is
+  -0.00074 (95 % bootstrap over batters: -0.00148 to about 0); both minus
+  wOBA is -0.00083 (-0.00138 to -0.00030). Adding sprint speed does not help
+  (0.02383). One split, so read the size of the gain loosely.
+
 ## Data tests
 
 Besides key uniqueness and value ranges on every mart:
@@ -102,6 +132,10 @@ Besides key uniqueness and value ranges on every mart:
 - **Reliability recomputed** (`assert_scouting_reliability_recomputed`): every
   cell of `mart_scouting_reliability` is computed again another way (group-by
   means and joins instead of window functions and UNPIVOT) and must match.
+  `assert_batter_process_reliability_recomputed` does the same for
+  `mart_batter_process_reliability` with one join per metric. Both tests
+  repeat the model's filters and bin edges, so they catch a wrong build of
+  the table, not a wrong definition.
 
 - **FIP reconciliation** (`assert_fip_matches_statsapi`): our FIP, with the
   league constant rebuilt from the same table, must equal the Stats API figure
