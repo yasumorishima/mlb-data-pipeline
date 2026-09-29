@@ -337,3 +337,44 @@ models:
       - name: next_woba_corr
         data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+
+  - name: mart_fielding_running_reliability
+    description: >
+      Year-to-year correlation of the fielding and running numbers for the
+      same player. Fielding metrics pair the same player at the same position
+      and are grouped by position (the OAA source has no attempt count, so no
+      sample-size bin). Running metrics are binned by the smaller of the two
+      seasons' competitive runs. mean_change is next season minus this one.
+      Pairs whose second season is in progress are left out. How well one
+      season predicts the next, not a within-season reliability.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination: {arguments: {columns: [metric, group_label]}}
+    columns:
+      - name: metric
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [oaa, fielding_runs_prevented, success_rate_diff, sprint_speed, hp_to_1b]}}}]
+      - name: group_label
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        description: Position (1B to RF) for fielding metrics; competitive-run bin (10-24, 25-49, 50-99, 100+) for running metrics.
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: ['1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', '10-24', '25-49', '50-99', '100+']}}}]
+      - name: min_runs_lo
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        description: Lower edge of the competitive-run bin; NULL for fielding metrics.
+      - name: min_runs_hi
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        description: Upper edge of the bin; NULL for the open top bin (100+) and for fielding metrics.
+      - name: n_pairs
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        description: A group with fewer than 30 pairs fails the build rather than publish a noisy correlation.
+        data_tests: [{in_range: {arguments: {min_value: 30}}}]
+      - name: yoy_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+      - name: mean_change
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        description: Average of next season minus this season, in the metric's own unit.
+        data_tests: [not_null]

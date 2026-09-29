@@ -27,6 +27,7 @@ cell (text and integers exactly, floats within 2e-15).
 | `mart_scouting_reliability` | metric x sample-size bin | Year-to-year correlation of each pitch metric for the same pitcher and pitch type, raw and within pitch type: how far a one-season number can be trusted. Write-up: [JP](https://zenn.dev/shogaku/articles/mlb-pitch-metric-reliability-memo) / [EN](https://dev.to/yasumorishima/does-a-pitchs-performance-carry-over-to-next-season-whiff-rate-vs-run-value-on-8022-mlb-pairs-bj). |
 | `mart_batter_process_reliability` | metric x PA bin | For the same batter in consecutive seasons: how much wOBA, xwOBA, their gap, BABIP, K%, BB% and ISO carry over, and how well each predicts next season's wOBA. |
 | `mart_pitcher_process_reliability` | metric x BF bin | For the same pitcher in consecutive seasons: how much ERA, FIP, xERA, ERA - xERA, K-BB%, K%, BB% and xwOBA allowed carry over, and how well each predicts next season's ERA. |
+| `mart_fielding_running_reliability` | metric x position / competitive-run bin | For the same player in consecutive seasons: how much OAA, fielding runs prevented and the catch-rate gap carry over at each position, and how much sprint speed and home-to-first time carry over by number of competitive runs. |
 
 | BI table | Grain | Adds to the mart |
 | --- | --- | --- |
@@ -165,6 +166,46 @@ two low bins (233 of 1,228 and 156 of 1,325). Correlations, same pitcher:
 
 ![FIP, xERA or K-BB% each predict next season's ERA better than ERA does](../docs/images/pitcher_process_3_en.png)
 
+## Fielding and running
+
+`mart_fielding_running_reliability` (build of 2026-09-30): pairs of
+consecutive finished seasons, 2016-2025 for fielding (1,401 pairs, same
+player at the same position, qualified fielders only) and 2015-2025 for
+running (4,345 pairs for sprint speed, 3,698 for home to first).
+Correlations, same player:
+
+| position | pairs | OAA | fielding runs prevented | catch rate above expected |
+| --- | ---: | ---: | ---: | ---: |
+| 1B | 218 | 0.26 | 0.27 | 0.14 |
+| 2B | 197 | 0.47 | 0.46 | 0.43 |
+| 3B | 208 | 0.41 | 0.41 | 0.39 |
+| SS | 222 | 0.43 | 0.43 | 0.45 |
+| LF | 173 | 0.45 | 0.45 | 0.45 |
+| CF | 193 | 0.50 | 0.51 | 0.50 |
+| RF | 190 | 0.48 | 0.48 | 0.45 |
+
+| smaller competitive runs of the pair | pairs | sprint speed | mean change (ft/s) |
+| --- | ---: | ---: | ---: |
+| 10-24 | 696 | 0.89 | -0.14 |
+| 25-49 | 817 | 0.93 | -0.12 |
+| 50-99 | 1,168 | 0.94 | -0.15 |
+| 100+ | 1,664 | 0.95 | -0.15 |
+
+- Sprint speed is close to fixed from one season to the next even on 10 to
+  24 runs. Among players who came back, it drops 0.12 to 0.15 ft/s a year
+  on average. Home to first behaves the same (0.90 to 0.95).
+- One season of OAA carries over about half as well (0.4 to 0.5 at most
+  positions, 0.26 at first base). The Savant table has no attempt count, so
+  these are not split by sample size; and it lists qualified fielders only,
+  so part-time fielders are not in these numbers.
+- The rate (actual minus expected catch rate, published in whole points)
+  carries over about as much as the totals at every position except first
+  base.
+- The position is where the fielder played in that row, not their main
+  position (they differ on about 7 % of rows). The 60-game 2020 season is
+  kept; its totals are small, which moves the average change of the totals
+  for the pairs that include it.
+
 ## Data tests
 
 Besides key uniqueness and value ranges on every mart:
@@ -180,7 +221,9 @@ Besides key uniqueness and value ranges on every mart:
   `assert_batter_process_reliability_recomputed` does the same for
   `mart_batter_process_reliability` with one join per metric, and
   `assert_pitcher_process_reliability_recomputed` for
-  `mart_pitcher_process_reliability`. These tests
+  `mart_pitcher_process_reliability`.
+  `assert_fielding_running_reliability_recomputed` reads the raw sources
+  (not staging) and rebuilds each correlation from sums. These tests
   repeat the model's filters and bin edges, so they catch a wrong build of
   the table, not a wrong definition.
 
