@@ -31,13 +31,16 @@ HF = "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/{rev}/{nam
 
 # A sandbox table lives at most 60 days from its creation. A truncating load
 # keeps the creation time, and asking for an expiry past creation + 60 days is
-# refused with 403 "Billing has not been enabled" (from 2026-09-29 on, two
+# refused with 403 "Billing has not been enabled ... Table expiration time
+# must be less than 60 days while in sandbox mode" (from 2026-09-29 on, two
 # days after the tables were created, every run failed this way). So the
-# expiry is capped at that limit, and a table close to it is dropped and
-# loaded again, which starts a new 60 days.
+# expiry is capped at that limit, and a table with less than RENEW left is
+# dropped and loaded again, which starts a new 60 days. This job runs only
+# after a successful weekly refresh or a push, so RENEW leaves room for
+# several missed weeks.
 LIFE = datetime.timedelta(days=60)
 MARGIN = datetime.timedelta(hours=1)
-RENEW = datetime.timedelta(days=14)
+RENEW = datetime.timedelta(days=30)
 
 
 def expiry(created: datetime.datetime, now: datetime.datetime) -> datetime.datetime:
