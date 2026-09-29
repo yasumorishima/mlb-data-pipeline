@@ -16,8 +16,8 @@
 --
 -- mean_change is the average of next season minus this season (aging shows
 -- up here for sprint speed, among players who came back). The 60-game 2020
--- season is kept, which pulls down the totals (oaa, fielding_runs_prevented)
--- of pairs touching it. Pairs whose second season is still in progress are
+-- season is kept; its totals (oaa, fielding_runs_prevented) are small, which
+-- moves the average change of the pairs that include it. Pairs whose second season is still in progress are
 -- left out, as in mart_scouting_reliability.
 with partial_seasons as (
     select distinct season from {{ ref("stg_statsapi__pitching") }} where is_partial
@@ -30,7 +30,7 @@ fielding_pairs as (
     select
         '{{ m }}' as metric,
         -- position_code, not primary_position: the latter is the player's main
-        -- position and differs from the row's position on about 4 % of pairs.
+        -- position and differs from the row's position on about 7 % of rows.
         case x.position_code when 3 then '1B' when 4 then '2B' when 5 then '3B' when 6 then 'SS'
                              when 7 then 'LF' when 8 then 'CF' when 9 then 'RF' end as group_label,
         cast(null as {{ dbt.type_int() }}) as min_runs_lo,

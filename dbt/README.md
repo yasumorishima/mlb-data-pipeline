@@ -202,9 +202,9 @@ Correlations, same player:
   carries over about as much as the totals at every position except first
   base.
 - The position is where the fielder played in that row, not their main
-  position (they differ on about 4 % of rows). The 60-game 2020 season is
-  kept; it pulls down the average change of the totals for pairs touching
-  it.
+  position (they differ on about 7 % of rows). The 60-game 2020 season is
+  kept; its totals are small, which moves the average change of the totals
+  for the pairs that include it.
 
 ## Data tests
 
