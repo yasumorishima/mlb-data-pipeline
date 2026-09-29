@@ -29,6 +29,27 @@ from google.cloud import bigquery
 HERE = pathlib.Path(__file__).resolve().parent
 HF = "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/{rev}/{name}.parquet"
 
+# A sandbox table lives at most 60 days from its creation. A truncating load
+# keeps the creation time, and asking for an expiry past creation + 60 days is
+# refused with 403 "Billing has not been enabled" (from 2026-09-29 on, two
+# days after the tables were created, every run failed this way). So the
+# expiry is capped at that limit, and a table close to it is dropped and
+# loaded again, which starts a new 60 days.
+LIFE = datetime.timedelta(days=60)
+MARGIN = datetime.timedelta(hours=1)
+RENEW = datetime.timedelta(days=14)
+
+
+def expiry(created: datetime.datetime, now: datetime.datetime) -> datetime.datetime:
+    """59 days from now, but never past what the sandbox allows."""
+    e = min(now + datetime.timedelta(days=59), created + LIFE - MARGIN)
+    return e.replace(microsecond=e.microsecond // 1000 * 1000)  # BigQuery keeps ms
+
+
+def needs_renewal(created: datetime.datetime, now: datetime.datetime) -> bool:
+    """True when the table can no longer be kept for RENEW more days."""
+    return created + LIFE - MARGIN - now < RENEW
+
 
 def source_tables() -> list[str]:
     doc = yaml.safe_load((HERE / "models" / "sources.yml").read_text(encoding="utf-8"))
@@ -59,16 +80,17 @@ def main(rev: str) -> int:
     names = source_tables()
     # The sandbox's 10 GiB storage allowance is for life and is not given back
     # when data is deleted, so a revision already in place is not loaded again.
-    current = []
+    now = datetime.datetime.now(datetime.timezone.utc)
+    current, renew = [], set()
     for name in names:
         try:
-            current.append(bq.get_table(f"{project}.{dataset}.{name}").description == marker)
+            t = bq.get_table(f"{project}.{dataset}.{name}")
         except NotFound:
             current.append(False)
-    # Sandbox tables expire after at most 60 days. Set it on every run rather
-    # than rely on whether a truncating load keeps the old expiry.
-    expires = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=59)
-    expires = expires.replace(microsecond=expires.microsecond // 1000 * 1000)  # BigQuery keeps ms
+            continue
+        if needs_renewal(t.created, now):
+            renew.add(name)
+        current.append(t.description == marker and name not in renew)
     if all(current):
         # Off-season refreshes can leave the dataset revision unchanged for
         # months; without this the raw tables would expire under the weekly
@@ -76,11 +98,12 @@ def main(rev: str) -> int:
         # a load, so it costs no storage.
         for name in names:
             t = bq.get_table(f"{project}.{dataset}.{name}")
-            t.expires = expires
+            t.expires = expires = expiry(t.created, now)
             if bq.update_table(t, ["expires"]).expires != expires:
                 print(f"{name}: expiry not moved to {expires}")
                 return 1
-        print(f"{dataset} already holds {marker}; nothing loaded, expiry moved to {expires:%Y-%m-%d}")
+            print(f"{name}: created {t.created:%Y-%m-%d}, expires {expires:%Y-%m-%d}")
+        print(f"{dataset} already holds {marker}; nothing loaded")
         return 0
     with tempfile.TemporaryDirectory() as tmp:
         for name in names:
@@ -89,6 +112,10 @@ def main(rev: str) -> int:
                 path.write_bytes(r.read())
             want = pq.ParquetFile(path).metadata.num_rows
             table = f"{project}.{dataset}.{name}"
+            if name in renew:
+                # A new table gets a new 60 days; a truncating load would not.
+                bq.delete_table(table, not_found_ok=True)
+                print(f"{name}: dropped to renew its 60 days")
             with path.open("rb") as f:
                 bq.load_table_from_file(f, table, job_config=config).result(timeout=600)
             t = bq.get_table(table)
@@ -97,11 +124,12 @@ def main(rev: str) -> int:
                 return 1
             got = t.num_rows
             # Marked only after the count checks, so a failed run is reloaded.
-            t.description, t.expires = marker, expires
+            t.description, t.expires = marker, expiry(t.created, now)
+            expires = t.expires
             if bq.update_table(t, ["description", "expires"]).expires != expires:
                 print(f"{table}: expiry not set to {expires}")
                 return 1
-            print(f"{name}: {got} rows -> {table}")
+            print(f"{name}: {got} rows -> {table}, created {t.created:%Y-%m-%d}, expires {expires:%Y-%m-%d}")
     return 0
 
 
