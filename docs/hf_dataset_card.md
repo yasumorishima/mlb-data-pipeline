@@ -56,6 +56,8 @@ configs:
     data_files: marts/mart_batter_process_reliability.parquet
   - config_name: mart_pitcher_process_reliability
     data_files: marts/mart_pitcher_process_reliability.parquet
+  - config_name: mart_fielding_running_reliability
+    data_files: marts/mart_fielding_running_reliability.parquet
 ---
 
 # MLB Shared Stats
@@ -111,6 +113,7 @@ pipeline commit, and the revision of this dataset they were built from. Rows for
 | `marts/mart_scouting_reliability.parquet` | metric x sample-size bin: year-to-year correlation of each pitch metric, raw and within pitch type |
 | `marts/mart_batter_process_reliability.parquet` | metric x PA bin: year-to-year correlation of each batting number and its correlation with next season's wOBA |
 | `marts/mart_pitcher_process_reliability.parquet` | metric x BF bin: year-to-year correlation of each pitching number and its correlation with next season's ERA |
+| `marts/mart_fielding_running_reliability.parquet` | metric x position or competitive-run bin: year-to-year correlation of OAA, fielding runs prevented, catch rate above expected, sprint speed and home to first |
 
 ### Why the three FanGraphs tables are frozen
 
