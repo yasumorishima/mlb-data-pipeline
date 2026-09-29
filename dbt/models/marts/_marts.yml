@@ -268,6 +268,41 @@ models:
         data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
         data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
 
+  - name: mart_pitcher_process_reliability
+    description: >
+      Pitcher counterpart of mart_batter_process_reliability. Year-to-year
+      correlation of each run-prevention number for the same pitcher
+      (yoy_corr), and its correlation with the pitcher's ERA the next season
+      (next_era_corr), by the smaller of the two seasons' batters faced. Both
+      seasons need 100 BF or more and a Statcast xERA. Pairs whose second
+      season is in progress are left out. How well one season predicts the
+      next, not a within-season reliability.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - unique_combination: {arguments: {columns: [metric, min_bf_lo]}}
+    columns:
+      - name: metric
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [era, fip, xera, era_minus_xera, k_minus_bb_rate, k_rate, bb_rate, xwoba_allowed]}}}]
+      - name: min_bf_lo
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        constraints: [{type: not_null}]
+        data_tests: [{accepted_values: {arguments: {values: [100, 200, 400, 600], quote: false}}}]
+      - name: min_bf_hi
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'integer' }}"
+        description: NULL for the open top bin (600 BF and up).
+      - name: n_pairs
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        description: A bin with fewer than 30 pairs fails the build rather than publish a noisy correlation.
+        data_tests: [{in_range: {arguments: {min_value: 30}}}]
+      - name: yoy_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
+      - name: next_era_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [not_null, {in_range: {arguments: {min_value: -1, max_value: 1}}}]
   - name: mart_batter_process_reliability
     description: >
       Year-to-year correlation of each batting number for the same batter
