@@ -176,13 +176,13 @@ Correlations, same player:
 
 | position | pairs | OAA | fielding runs prevented | catch rate above expected |
 | --- | ---: | ---: | ---: | ---: |
-| 1B | 212 | 0.26 | 0.28 | 0.14 |
-| 2B | 201 | 0.46 | 0.44 | 0.41 |
-| 3B | 205 | 0.41 | 0.41 | 0.39 |
-| SS | 228 | 0.44 | 0.44 | 0.46 |
-| LF | 164 | 0.44 | 0.45 | 0.44 |
-| CF | 204 | 0.51 | 0.52 | 0.48 |
-| RF | 187 | 0.51 | 0.51 | 0.52 |
+| 1B | 218 | 0.26 | 0.27 | 0.14 |
+| 2B | 197 | 0.47 | 0.46 | 0.43 |
+| 3B | 208 | 0.41 | 0.41 | 0.39 |
+| SS | 222 | 0.43 | 0.43 | 0.45 |
+| LF | 173 | 0.45 | 0.45 | 0.45 |
+| CF | 193 | 0.50 | 0.51 | 0.50 |
+| RF | 190 | 0.48 | 0.48 | 0.45 |
 
 | smaller competitive runs of the pair | pairs | sprint speed | mean change (ft/s) |
 | --- | ---: | ---: | ---: |
@@ -192,15 +192,19 @@ Correlations, same player:
 | 100+ | 1,664 | 0.95 | -0.15 |
 
 - Sprint speed is close to fixed from one season to the next even on 10 to
-  24 runs, and a player loses about 0.15 ft/s a year on average. Home to
-  first behaves the same (0.90 to 0.95).
+  24 runs. Among players who came back, it drops 0.12 to 0.15 ft/s a year
+  on average. Home to first behaves the same (0.90 to 0.95).
 - One season of OAA carries over about half as well (0.4 to 0.5 at most
   positions, 0.26 at first base). The Savant table has no attempt count, so
   these are not split by sample size; and it lists qualified fielders only,
   so part-time fielders are not in these numbers.
-- The rate (actual minus expected catch rate, in whole points) carries over
-  about as well as the total at every position except first base, so the
-  totals are not repeating mainly through playing time.
+- The rate (actual minus expected catch rate, published in whole points)
+  carries over about as much as the totals at every position except first
+  base.
+- The position is where the fielder played in that row, not their main
+  position (they differ on about 4 % of rows). The 60-game 2020 season is
+  kept; it pulls down the average change of the totals for pairs touching
+  it.
 
 ## Data tests
 
