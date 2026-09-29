@@ -26,6 +26,7 @@ cell (text and integers exactly, floats within 2e-15).
 | `mart_pitch_arsenal_scouting` | pitcher-season-pitch | Usage rank plus whiff and run-value percentiles within the same pitch type and season. |
 | `mart_scouting_reliability` | metric x sample-size bin | Year-to-year correlation of each pitch metric for the same pitcher and pitch type, raw and within pitch type: how far a one-season number can be trusted. Write-up: [JP](https://zenn.dev/shogaku/articles/mlb-pitch-metric-reliability-memo) / [EN](https://dev.to/yasumorishima/does-a-pitchs-performance-carry-over-to-next-season-whiff-rate-vs-run-value-on-8022-mlb-pairs-bj). |
 | `mart_batter_process_reliability` | metric x PA bin | For the same batter in consecutive seasons: how much wOBA, xwOBA, their gap, BABIP, K%, BB% and ISO carry over, and how well each predicts next season's wOBA. |
+| `mart_pitcher_process_reliability` | metric x BF bin | For the same pitcher in consecutive seasons: how much ERA, FIP, xERA, ERA - xERA, K-BB%, K%, BB% and xwOBA allowed carry over, and how well each predicts next season's ERA. |
 
 | BI table | Grain | Adds to the mart |
 | --- | --- | --- |
@@ -122,6 +123,48 @@ kept; its pairs sit mostly in the low bins. Correlations, same batter:
   wOBA is -0.00083 (-0.00138 to -0.00030). Adding sprint speed does not help
   (0.02383). One split, so read the size of the gain loosely.
 
+## Result vs process for pitchers
+
+`mart_pitcher_process_reliability` (build of 2026-09-29): pairs of consecutive
+finished seasons 2015-2025 with 100+ batters faced and a Statcast xERA in
+each (3,272 pairs). The 60-game 2020 season is kept; its pairs sit in the
+two low bins (233 of 1,228 and 156 of 1,325). Correlations, same pitcher:
+
+| smaller BF of the pair | pairs | ERA | FIP | xERA | K-BB% | ERA - xERA | ERA with next ERA | FIP with next ERA | xERA with next ERA |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 100-199 | 1,228 | 0.11 | 0.24 | 0.28 | 0.43 | -0.01 | 0.11 | 0.18 | 0.21 |
+| 200-399 | 1,325 | 0.20 | 0.34 | 0.42 | 0.59 | 0.02 | 0.20 | 0.27 | 0.32 |
+| 400-599 | 369 | 0.23 | 0.37 | 0.40 | 0.71 | 0.14 | 0.23 | 0.30 | 0.29 |
+| 600+ | 350 | 0.33 | 0.52 | 0.51 | 0.68 | 0.12 | 0.33 | 0.39 | 0.38 |
+
+![ERA barely carries over; K-BB% does](../docs/images/pitcher_process_1_en.png)
+
+- ERA repeats the least of the four at every sample size; FIP and xERA sit
+  in between; K-BB% repeats the most.
+- Beating xERA mostly does not repeat (ERA - xERA: about 0 below 400 BF,
+  0.12 to 0.14 above). For regular batters the gap (wOBA - xwOBA) repeats at
+  0.33 to 0.37 with 400+ PA (0.09 and 0.19 below that), so "outperforms the
+  expected stats" holds up much better for batters than for pitchers. The
+  chart puts PA and batters faced on one axis; 400 BF is roughly a
+  95-inning pitcher, not the same player as a 400-PA batter.
+
+![Regular batters who beat their xwOBA keep beating it; pitchers mostly do not](../docs/images/pitcher_process_2_en.png)
+
+- A held-out check: one-variable fits on pairs starting 2015-2022, scored on
+  pairs starting 2023 and 2024 (696 pairs, 457 pitchers); fit and error both
+  weighted by next season's BF; MAE of next season's ERA. A constant 0.914,
+  last ERA 0.897, FIP 0.871, xERA 0.864, K-BB% 0.857. Against last ERA,
+  95 % intervals from resampling pitchers: FIP -0.026 (-0.042 to -0.010),
+  xERA -0.032 (-0.051 to -0.014), K-BB% -0.040 (-0.065 to -0.016); last ERA
+  against the constant -0.017 (-0.036 to +0.002). K-BB% and xERA cannot be
+  told apart in this split (-0.008, -0.028 to +0.012), nor can K-BB% and FIP
+  or FIP and xERA, so the order of the three is not a ranking. In the
+  training fit, last ERA gets a weight near zero (slightly negative) once
+  FIP or xERA is in. The chart's intervals are against the constant. One
+  split, so read the size of the gain loosely.
+
+![FIP, xERA or K-BB% each predict next season's ERA better than ERA does](../docs/images/pitcher_process_3_en.png)
+
 ## Data tests
 
 Besides key uniqueness and value ranges on every mart:
@@ -135,7 +178,9 @@ Besides key uniqueness and value ranges on every mart:
   cell of `mart_scouting_reliability` is computed again another way (group-by
   means and joins instead of window functions and UNPIVOT) and must match.
   `assert_batter_process_reliability_recomputed` does the same for
-  `mart_batter_process_reliability` with one join per metric. Both tests
+  `mart_batter_process_reliability` with one join per metric, and
+  `assert_pitcher_process_reliability_recomputed` for
+  `mart_pitcher_process_reliability`. These tests
   repeat the model's filters and bin edges, so they catch a wrong build of
   the table, not a wrong definition.
 
