@@ -25,10 +25,14 @@ lg26 = P.league(bat, pit, 2026)
 mil = rosters[(rosters.season == 2026) & (rosters.team == "MIL")].player_id
 a_b = bat[(bat.season == 2026) & bat.player_id.isin(mil) & (bat.pa > 0)].set_index("player_id")
 a_p = pit[(pit.season == 2026) & pit.player_id.isin(mil) & (pit.ip > 0)].set_index("player_id")
-rb = pd.DataFrame({"proj_pa": pb.pa, "proj_runs": pb.pa * pb.rel / lg25["scale"]}).reindex(mil).dropna()
+# The team projection rescales playing time so the roster fills 162 games;
+# use the same scaling here so the players add up to the team figure.
+kb = lg25["pa_g"] * P.G / pb.pa.reindex(mil).dropna().sum()
+kp = lg25["ip_g"] * P.G / pp.ip.reindex(mil).dropna().sum()
+rb = pd.DataFrame({"proj_pa": kb * pb.pa, "proj_runs": kb * pb.pa * pb.rel / lg25["scale"]}).reindex(mil).dropna()
 rb["act_pa"] = a_b.pa.reindex(rb.index).fillna(0)
 rb["act_runs"] = ((a_b.woba - lg26["woba"]) * a_b.pa / lg26["scale"]).reindex(rb.index).fillna(0)
-rp = pd.DataFrame({"proj_ip": pp.ip, "proj_runs": -pp.ip * pp.rel / 9}).reindex(mil).dropna()
+rp = pd.DataFrame({"proj_ip": kp * pp.ip, "proj_runs": -kp * pp.ip * pp.rel / 9}).reindex(mil).dropna()
 rp["act_ip"] = a_p.ip.reindex(rp.index).fillna(0)
 rp["act_runs"] = (-(a_p.fip - lg26["fip"]) * a_p.ip / 9).reindex(rp.index).fillna(0)
 for nm, r in [("MIL batters", rb), ("MIL pitchers (runs saved, FIP)", rp)]:

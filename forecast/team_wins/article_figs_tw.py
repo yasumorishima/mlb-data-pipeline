@@ -25,28 +25,36 @@ T = {
    f1l=["選手の見込みを\n足した予測", "全球団\n5 割", "前年の\n勝率", "前年の\nピタゴラス勝率"],
    f2="9 シーズン中 7 シーズンで、前年のピタゴラス勝率より誤差が小さかった", f2n="平均誤差（勝）",
    f2a="選手の見込みを足した予測", f2b="前年のピタゴラス勝率（床）",
-   f3="当たった球団と外れた球団", f3x="予測した勝数", f3y="実際の勝数",
+   f3="大きく外れたのは MIL・TB・SF・ATH の 4 球団", f3x="予測した勝数", f3y="実際の勝数",
    f4="予測の散らばりは実際の半分しかない", f4a="予測", f4b="実際", f4x="2026 年の勝数", f4n="標準偏差：予測 {p:.1f} 勝、実際 {a:.1f} 勝",
-   f5="得失点が分かっていても 4 勝は外れる", f5n="2026 年・30 球団の平均誤差（勝）",
+   f5="得失点が分かっていても 4 勝ほどは外れる", f5n="2026 年・30 球団の平均誤差（勝）",
    f5l=["実際の得失点から\nピタゴラス式で", "選手の見込みから\n（今回の予測）"],
-   f6="MIL：見込みの対象だった選手が上振れした", f6x="見込みとの差（点・失点を防いだ分も含む）",
+   f6="MIL：見込みより 30 点以上上振れした選手が 2 人いた", f6x="見込みとの差（点・失点を防いだ分も含む）",
    f6n="打者は wOBA、投手は FIP から換算した、リーグ平均を上回った点の差",
-   f7="出場の 2〜3 割は、見込みの無い選手だった", f7n="2026 年、開幕時の 40 人枠に過去の成績がある選手以外が占めた割合",
-   f7l=["打席", "投球回"]),
+   f7="出場の 2〜3 割は、見込みの無い選手だった", f7n="2026 年、開幕時の 40 人枠にいて過去の成績もある選手以外が占めた割合",
+   f7l=["打席", "投球回"],
+   f8="外れの中身は球団ごとに違う", f8n="予測との差（勝）を 2 つに分けたもの。マイナス＝予測より多く勝った",
+   f8a="得失点の見込みのずれ", f8b="得失点のわりの勝ち負け",
+   f9="MIL：得失点のずれのうち、見込みのあった選手の上振れは 4 割", f9n="得点 +93・失点 −96、合わせて約 190 点のずれの内訳（点）",
+   f9l=["見込みのあった打者の上振れ", "見込みのあった投手の上振れ\n（FIP から見た分）", "それ以外\n（守備・走塁・見込みの無い選手など）"]),
  "en": dict(font="DejaVu Sans",
    f1="2026: lower error than the floors, but not distinguishably",
    f1n="Mean absolute error of wins over 30 teams",
    f1l=["Projection from\nplayer forecasts", "Every team\n.500", "Last season's\nrecord", "Last season's\nPythagenpat"],
    f2="Lower error than last season's Pythagenpat in 7 of 9 seasons", f2n="Mean absolute error (wins)",
    f2a="Projection from player forecasts", f2b="Last season's Pythagenpat (floor)",
-   f3="Hits and misses", f3x="Projected wins", f3y="Actual wins",
+   f3="The big misses were MIL, TB, SF and ATH", f3x="Projected wins", f3y="Actual wins",
    f4="The projections spread half as wide as the results", f4a="Projected", f4b="Actual", f4x="2026 wins", f4n="Standard deviation: projected {p:.1f}, actual {a:.1f} wins",
-   f5="Even with the actual runs, a 4-win miss remains", f5n="2026, mean absolute error over 30 teams (wins)",
+   f5="Even with the actual runs, about 4 wins of error remain", f5n="2026, mean absolute error over 30 teams (wins)",
    f5l=["Pythagenpat from\nactual runs", "From player\nforecasts (this one)"],
-   f6="MIL: players it did project played above their forecasts", f6x="Actual minus projected runs",
+   f6="MIL: two projected players beat their forecast by 30+ runs", f6x="Actual minus projected runs",
    f6n="Runs above league average from wOBA (batters) or FIP (pitchers)",
-   f7="20-30% of playing time went to players with no forecast", f7n="2026: share not by opening-day 40-man players with MLB history",
-   f7l=["Plate appearances", "Innings"]),
+   f7="20-30% of playing time went to players with no forecast", f7n="2026: share taken by players other than opening-day 40-man players with MLB history",
+   f7l=["Plate appearances", "Innings"],
+   f8="What the miss is made of differs by team", f8n="Projected minus actual wins, split in two; negative = won more than projected",
+   f8a="Runs projection off", f8b="Record vs runs",
+   f9="MIL: projected players beating forecasts explain 40% of the run gap", f9n="Runs +93 scored, -96 allowed: about 190 runs in all",
+   f9l=["Projected batters\nabove forecast", "Projected pitchers\nabove forecast (FIP)", "Everything else\n(fielding, baserunning,\nunprojected players)"]),
 }
 
 
@@ -54,7 +62,7 @@ def base(ax):
     for s in ("top", "right", "left"):
         ax.spines[s].set_visible(False)
     ax.spines["bottom"].set_color(GRAY)
-    ax.tick_params(colors=SUB, length=0, labelsize=13)
+    ax.tick_params(colors=SUB, length=0, labelsize=14)
 
 
 def title(fig, text, note=None):
@@ -138,16 +146,45 @@ for lang, t in T.items():
     for i, v in enumerate(g.values):
         ax.text(v + 0.5, i, f"+{v:.0f}", va="center", fontsize=13, color=ORANGE if v > 25 else SUB)
     ax.set_yticks(range(len(g)), g.index); ax.set_xticks([])
-    ax.set_xlabel(t["f6x"], fontsize=13, color=SUB)
+    ax.set_xlabel(t["f6x"], fontsize=14, color=SUB)
     save(fig, "team_wins_6", lang)
 
     # 7. unprojected playing time
     fig = plt.figure(figsize=(10, 4.6)); title(fig, t["f7"], t["f7n"])
     ax = fig.add_axes([0.2, 0.12, 0.74, 0.55]); base(ax)
-    v = [0.198, 0.271]
+    sh = pd.read_csv("share_2026.csv").iloc[0]
+    v = [sh.pa, sh.ip]
     ax.barh([1, 0], v, color=BLUE, height=0.5)
     for i, y in zip([1, 0], v):
         ax.text(y + 0.005, i, f"{y:.0%}", va="center", fontsize=15, color=BLUE)
     ax.set_yticks([1, 0], t["f7l"]); ax.set_xticks([]); ax.set_xlim(0, 0.35)
     save(fig, "team_wins_7", lang)
+    # 8. four big misses split
+    four = dig.set_index("team").loc[["MIL", "TB", "SF", "ATH"]]
+    fig = plt.figure(figsize=(10, 5.6)); title(fig, t["f8"], t["f8n"])
+    ax = fig.add_axes([0.1, 0.08, 0.86, 0.62]); base(ax)
+    y = np.arange(4)[::-1]
+    ax.barh(y + 0.18, four.miss_runs, height=0.34, color=BLUE)
+    ax.barh(y - 0.18, four.miss_luck, height=0.34, color=GRAY)
+    for yy, a, b in zip(y, four.miss_runs, four.miss_luck):
+        ax.text(a + (0.6 if a > 0 else -0.6), yy + 0.18, f"{a:+.0f}", va="center", ha="left" if a > 0 else "right", fontsize=13, color=BLUE)
+        ax.text(b + (0.6 if b > 0 else -0.6), yy - 0.18, f"{b:+.0f}", va="center", ha="left" if b > 0 else "right", fontsize=13, color=SUB)
+    ax.text(4.5, y[0] + 0.18, t["f8a"], va="center", ha="left", fontsize=13, color=BLUE)
+    ax.text(4.5, y[0] - 0.18, t["f8b"], va="center", ha="left", fontsize=13, color=SUB)
+    ax.axvline(0, color=GRAY, lw=1); ax.set_yticks(y, four.index); ax.set_xticks([]); ax.set_xlim(-26, 26)
+    ax.spines["bottom"].set_visible(False)
+    save(fig, "team_wins_8", lang)
+
+    # 9. MIL run gap
+    mil = dig.set_index("team").loc["MIL"]
+    total = -mil.rs_err + mil.ra_err
+    bparts = [mb.gap.sum(), mp.gap.sum()]
+    parts = bparts + [total - sum(bparts)]
+    fig = plt.figure(figsize=(10, 5.2)); title(fig, t["f9"], t["f9n"])
+    ax = fig.add_axes([0.36, 0.1, 0.58, 0.62]); base(ax)
+    ax.barh([2, 1, 0], parts, color=[BLUE, BLUE, GRAY], height=0.55)
+    for i, v in zip([2, 1, 0], parts):
+        ax.text(v + 2, i, f"{v:.0f}", va="center", fontsize=15, color=SUB if i == 0 else BLUE)
+    ax.set_yticks([2, 1, 0], t["f9l"]); ax.set_xticks([]); ax.set_xlim(0, 140)
+    save(fig, "team_wins_9", lang)
 print("ok", mae26)

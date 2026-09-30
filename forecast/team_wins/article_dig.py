@@ -51,6 +51,8 @@ share = pd.DataFrame({
     "war_nohist": b26[b26.no_hist].groupby("last_team_id").war.sum() + p26[p26.no_hist].groupby("last_team_id").war.sum(),
 }).fillna(0)
 d = d.merge(share, left_on="team_id", right_index=True)
+pd.DataFrame({"pa": [b26.pa[~b26.projected].sum() / b26.pa.sum()],
+              "ip": [p26.ip[~p26.projected].sum() / p26.ip.sum()]}).to_csv("share_2026.csv", index=False)
 print("league: PA by unprojected", round(b26.pa[~b26.projected].sum() / b26.pa.sum(), 3),
       "IP by unprojected", round(p26.ip[~p26.projected].sum() / p26.ip.sum(), 3))
 print("corr(miss, war_unproj)", np.corrcoef(d.miss, d.war_unproj)[0, 1].round(3),
