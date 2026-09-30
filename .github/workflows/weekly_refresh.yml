@@ -103,10 +103,13 @@ jobs:
           # returns no clubs at all once the regular season is over
           # (2026-09-27: 30/30, 2026-09-28: 0/0), so every offseason run
           # fell back to the previous season and the audit refused to
-          # publish (run 36385596244). Without a date it returns the
-          # season's standings as they stand: the final table after the
-          # season, the live table during it, and no clubs for a season
-          # that has not started (2027 on 2026-10-01: 0/0).
+          # publish (run 36385596244). Without a date it returns the final
+          # table after the season (2024, 2025, 2026: 30/30) and no clubs
+          # for a season that has not started (2027 on 2026-10-01: 0/0),
+          # regular season only (spring training needs standingsTypes). Its
+          # answer early in a season has not been observed; if it gave no
+          # clubs there, the run would keep last season a little longer,
+          # which is the safe direction.
           END_YEAR="$END_YEAR_INPUT"
           if [ -z "$END_YEAR" ]; then
             YEAR="$(date -u +%Y)"
