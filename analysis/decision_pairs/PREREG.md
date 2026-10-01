@@ -122,4 +122,17 @@ state the selection. Those three are fixed above.
 
 ## Amendments
 
-(none)
+1. 2026-10-01, before the test run. The test revision is
+   `e006cbe12da75aac0cb96892ac8b43b9a27e5261` (marts built by pipeline
+   commit `67512dd`, input dataset revision `e5f1156`, whose
+   `statsapi_pitching.parquet` was committed 2026-10-01 00:47:59 UTC). It is
+   the first marts commit built after this file was merged with a statsapi
+   fetch made after 2026-09-29; the 2026-09-28 scheduled refresh failed and
+   wrote nothing (its end-year probe lost the finished season, fixed in
+   PR #46). Only the 2026 row count and `is_partial` were read from it
+   (868 rows, none partial), no ERA.
+2. PR #46 also made `is_partial` false once a season's regular-season
+   schedule is all Final, so the statements above that it "stays true for
+   2026 until 2027" and "cannot turn false before 2027" no longer hold for
+   new revisions. `pairs.py` does not gate on it in the test, so the frozen
+   code and its md5 are unchanged.
