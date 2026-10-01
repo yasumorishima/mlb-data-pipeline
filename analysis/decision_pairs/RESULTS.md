@@ -41,12 +41,15 @@ for one season. "Indistinguishable" is not read as "no difference".
 | K−BB% | 0.595 | 0.584 |
 | blend | 0.599 (in-sample) | 0.585 |
 
-The ERA rule lands on the same 0.558. The other four are 0.9 to 1.6
-points lower than in development.
+Development is t = 2015–2024 without t = 2019 and t = 2020 (outcomes up
+to 2025). The ERA rule lands on the same 0.558. The other four are 0.9
+to 1.6 points lower than in development (the blend against its
+in-sample figure).
 
 ## Where the choice of rule matters
 
-In the pairs where ERA and another rule pick different pitchers:
+In the pairs where ERA and another rule pick opposite pitchers (a pair
+where either rule is tied is not counted here):
 
 | pairs where ERA and … disagree | pairs | ERA right | the other rule right |
 |---|---|---|---|
@@ -91,7 +94,8 @@ and 0.584 at the 100-batter bar).
 ## Material for the decision
 
 - One season's ERA picks the better pitcher of two about 56 % of the
-  time, in 2026 as in 2015–2024. Every rule here is closer to a coin flip
+  time, in 2026 as in the development seasons (2015–2024 without 2019 and
+  2020). Every rule here is closer to a coin flip
   than to certainty.
 - FIP, xERA, K−BB% and the blend picked right more often than ERA in
   2026 too (by 1.2 to 2.6 points), but 2026 alone cannot separate them
@@ -99,7 +103,8 @@ and 0.584 at the 100-batter bar).
   gap was 2.9 to 4.0 points with intervals clear of 0 (the blend's
   in-sample).
 - When ERA and K−BB% point at different pitchers, about a third of all
-  pairs, K−BB% was right 54 % of the time in 2026 and 56 % in 2015–2024.
+  pairs, K−BB% was right 54 % of the time in 2026 and 56 % in
+  development.
 - Not covered: cost, contract, health, role changes, park, and anything
   scouts see that these four numbers do not. The decision set only
   contains pitchers who reached 100 batters the next season.
