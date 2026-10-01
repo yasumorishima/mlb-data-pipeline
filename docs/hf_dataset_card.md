@@ -102,7 +102,7 @@ Analysis-ready tables built from the tables above by the
 and republished after every weekly refresh, only when all of its data tests
 pass. A build that fails leaves the previous marts in place, so they can lag
 the raw tables: `marts/_manifest.json` records when they were built, the
-pipeline commit, and the revision of this dataset they were built from. Rows for the season in progress carry `is_partial = true`.
+pipeline commit, and the revision of this dataset they were built from. Rows for a season whose regular season is not over carry `is_partial = true`.
 
 | File | Grain |
 |---|---|
@@ -172,7 +172,7 @@ Rows and columns:
 - A player who changed clubs has **one row with his season total**.
   `last_team_id` is the club he finished with and `num_teams` how many he
   played for. It is not "his stats for that club".
-- `is_partial` is true for the current season. `fetched_at` is when the row
+- `is_partial` is true for the current season until every regular-season game is final. `fetched_at` is when the row
   was read.
 - `inningsPitched` is kept as the API's string: `"5.1"` means five and one
   third innings, not 5.1. Use `outs / 3`.

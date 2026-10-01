@@ -87,10 +87,23 @@ def _pit_saber(pid, season, outs=30):
     return _split(pid, season, stat, pos="P")
 
 
-def _fake_api(seasons, *, pa0=(), mutate=None, n_players=12):
-    """A `_get` replacement answering like the API for the given seasons."""
+def _schedule(states):
+    """Schedule JSON shaped like /api/v1/schedule, one game per state."""
+    return {"dates": [{"games": [{"status": {"abstractGameState": s}}]} for s in states]}
+
+
+def _fake_api(seasons, *, pa0=(), mutate=None, n_players=12, over=()):
+    """A `_get` replacement answering like the API for the given seasons.
+
+    The regular-season schedule of a season in `over` is all Final; any
+    other season still has a game to play.
+    """
     def get(url):
         q = dict(part.split("=", 1) for part in url.split("?", 1)[1].split("&"))
+        if url.startswith(F.SCHEDULE):
+            assert q["gameType"] == "R", url
+            done = int(q["season"]) in over
+            return _schedule(["Final", "Final"] if done else ["Final", "Preview"])
         season, group, kind = int(q["season"]), q["group"], q["stats"]
         assert season in seasons, url
         # 12, not 3: validate_dataframe rejects a season under 10 rows.
@@ -584,7 +597,8 @@ def _run_determine_steps(today: str, curl_body: str | None, end_input: str = "",
     else:
         guard = ""
         if check_url:
-            guard = (f'case "$*" in *season={year}*date={today}*) ;; '
+            guard = (f'case "$*" in *date=*) echo "dated url: $*" >&2; exit 3;; '
+                     f'*season={year}*) ;; '
                      '*) echo "unexpected url: $*" >&2; exit 3;; esac\n')
         curl = "#!/bin/bash\n" + guard + "cat <<'JSON'\n" + curl_body + "\nJSON\n"
     (stubs / "curl").write_text(curl, encoding="utf-8")
@@ -637,10 +651,14 @@ def test_unreadable_standings_stop_the_run():
             body, code, out)
 
 
-def test_the_standings_request_names_this_season_and_today():
-    # The stub refuses any URL without season=<year> and date=<today>.
+def test_the_standings_request_names_this_season_and_no_date():
+    # The stub refuses any URL without season=<year>, and any URL with a
+    # date: with date=<today> the API returns no clubs once the regular
+    # season is over, and the offseason fell back a year (run 36385596244).
     code, out = _run_determine_steps("2027-05-01", _EVERYONE, check_url=True)
     assert code == 0 and "end_year=2027" in out, (code, out)
+    code, out = _run_determine_steps("2026-10-01", _EVERYONE, check_url=True)
+    assert code == 0 and "end_year=2026" in out, (code, out)
 
 
 def test_the_standings_request_retries():
@@ -754,6 +772,40 @@ def test_get_retries_a_tls_error_mid_read():
 
 
 # ------------------------------------------------ season boundary, escape hatch
+
+
+def test_after_the_last_game_the_season_is_not_partial():
+    # 2026-10-01: the 2026 regular season ended on 2026-09-27.
+    code, root = _run_main(_fake_api({2024, 2025, 2026}, over={2026}),
+                           today=dt.date(2026, 10, 1))
+    assert code in (0, None), code
+    bat = _written(root)["statsapi_batting"]
+    assert not bat["is_partial"].any(), "2026 is over once every game is Final"
+
+
+def test_a_finished_current_season_is_guarded_against_shrinking():
+    now = pd.DataFrame({"season": [2025] * 10 + [2026] * 9})
+    before = pd.DataFrame({"season": [2025] * 10 + [2026] * 10})
+    assert F.rows_per_season_vs_published(now, before, dt.date(2026, 10, 1)) == []
+    assert F.rows_per_season_vs_published(
+        now, before, dt.date(2026, 10, 1), frozenset({2026})) == [
+        "2026: 9 rows, published copy has 10"]
+
+
+def test_the_season_is_over_only_when_every_game_is_final():
+    for states, over in ((["Final"] * 3, True), (["Final", "Live"], False),
+                         (["Final", "Preview"], False), ([], False)):
+        with _Patched(F___get=lambda url, st=states: _schedule(st)):
+            assert F.regular_season_over(2026) is over, (states, over)
+
+
+def test_an_unreadable_schedule_stops_the_run():
+    def get(url):
+        if url.startswith(F.SCHEDULE):
+            raise F.FetchError("schedule: HTTP 503")
+        return _fake_api({2024, 2025, 2026})(url)
+    code, root = _run_main(get)
+    assert code == 1 and not _written(root), code
 
 
 def test_in_january_the_finished_season_is_not_partial():

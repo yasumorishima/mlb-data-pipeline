@@ -56,6 +56,7 @@ from config import (
 )
 
 API = "https://statsapi.mlb.com/api/v1/stats"
+SCHEDULE = "https://statsapi.mlb.com/api/v1/schedule"
 HF_BASE = "https://huggingface.co/datasets/yasumorishima/mlb-stats/resolve/main/"
 USER_AGENT = "mlb-data-pipeline (+https://github.com/yasumorishima/mlb-data-pipeline)"
 LIMIT = 5000
@@ -135,6 +136,32 @@ def _get(url: str, retries: int = 3) -> dict:
         if attempt + 1 < retries:
             time.sleep(2 * (attempt + 1))
     raise FetchError(f"{url}: gave up after {retries} attempts: {last!r}")
+
+
+def regular_season_over(season: int) -> bool:
+    """True once the season's regular-season schedule has games and all are Final.
+
+    `is_partial` used to be `season >= today.year`, a calendar flag: the
+    2026 season ended on 2026-09-27 and still read as partial, and would
+    have until 2027-01-01. Cancelled and postponed games carry the
+    abstract state Final too (2026: 2,459 entries, all Final, 28 of them
+    Postponed and one Cancelled), so "no game left to play" is exactly
+    "every entry is Final". An empty schedule is not over: before a season
+    is published there is nothing to have finished.
+    """
+    d = _get(f"{SCHEDULE}?sportId=1&season={season}&gameType=R")
+    states = [g["status"]["abstractGameState"]
+              for day in d.get("dates", []) for g in day.get("games", [])]
+    return bool(states) and all(s == "Final" for s in states)
+
+
+def finished_seasons(start: int, end: int, today: dt.date) -> frozenset[int]:
+    """Seasons from this calendar year on whose regular season is over.
+
+    Earlier seasons are finished by the calendar and are not asked about.
+    """
+    return frozenset(s for s in range(max(start, today.year), end + 1)
+                     if regular_season_over(s))
 
 
 def _url(stat_type: str, group: str, season: int) -> str:
@@ -251,7 +278,8 @@ def coerce_rates(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def fetch_group(group: str, start: int, end: int, today: dt.date) -> pd.DataFrame:
+def fetch_group(group: str, start: int, end: int, today: dt.date,
+                finished: frozenset[int] = frozenset()) -> pd.DataFrame:
     spec = GROUPS[group]
     frames = []
     for season in range(start, end + 1):
@@ -266,13 +294,14 @@ def fetch_group(group: str, start: int, end: int, today: dt.date) -> pd.DataFram
         frames.append(m)
         time.sleep(0.5)
     df = coerce_rates(pd.concat(frames, ignore_index=True))
-    df["is_partial"] = df["season"] >= today.year
+    df["is_partial"] = (df["season"] >= today.year) & ~df["season"].isin(finished)
     df["fetched_at"] = pd.Timestamp.now(tz="UTC").floor("s")
     return df
 
 
 def rows_per_season_vs_published(df: pd.DataFrame, published: pd.DataFrame | None,
-                                  today: dt.date) -> list[str]:
+                                  today: dt.date,
+                                  finished: frozenset[int] = frozenset()) -> list[str]:
     """Completed seasons that now have fewer players than the published copy.
 
     The player set of a finished season should not shrink from one week to the
@@ -283,8 +312,11 @@ def rows_per_season_vs_published(df: pd.DataFrame, published: pd.DataFrame | Non
     """
     if published is None or published.empty:
         return []
-    now = df[df["season"] < today.year].groupby("season").size()
-    before = published[published["season"] < today.year].groupby("season").size()
+    def done(s: pd.Series) -> pd.Series:
+        return (s < today.year) | s.isin(finished)
+
+    now = df[done(df["season"])].groupby("season").size()
+    before = published[done(published["season"])].groupby("season").size()
     problems = []
     for season, n_before in before.items():
         n_now = int(now.get(season, 0))
@@ -353,11 +385,18 @@ def main() -> int:
 
     t0 = time.time()
     today = _today()
+    try:
+        finished = finished_seasons(args.start_year, args.end_year, today)
+    except FetchError as e:
+        print(f"ERROR: reading the regular-season schedule: {e}")
+        raise SystemExit(1)
+    if finished:
+        print(f"Regular season over: {sorted(finished)} (not partial)")
     for group, spec in GROUPS.items():
         table = TABLES[group]
         print(f"{table} {args.start_year}-{args.end_year} ...")
         try:
-            df = fetch_group(group, args.start_year, args.end_year, today)
+            df = fetch_group(group, args.start_year, args.end_year, today, finished)
         except FetchError as e:
             print(f"ERROR: {table}: {e}")
             raise SystemExit(1)
@@ -376,7 +415,7 @@ def main() -> int:
         except FetchError as e:
             print(f"ERROR: {table}: {e}")
             raise SystemExit(1)
-        shrunk = rows_per_season_vs_published(df, published, today)
+        shrunk = rows_per_season_vs_published(df, published, today, finished)
         if shrunk and args.allow_shrink:
             print(f"WARNING: {table} has fewer players than the published copy "
                   "in completed seasons; publishing anyway (--allow-shrink):")

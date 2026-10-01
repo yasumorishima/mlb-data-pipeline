@@ -99,12 +99,23 @@ jobs:
           # outage made them look empty mid-season, the current season
           # would be missing from every file and the output audit refuses
           # to publish a table that lost a season.
+          # The query carries no date. With date=<today> the Stats API
+          # returns no clubs at all once the regular season is over
+          # (2026-09-27: 30/30, 2026-09-28: 0/0), so every offseason run
+          # fell back to the previous season and the audit refused to
+          # publish (run 36385596244). Without a date it returns the final
+          # table after the season (2024, 2025, 2026: 30/30) and no clubs
+          # for a season that has not started (2027 on 2026-10-01: 0/0),
+          # regular season only (spring training needs standingsTypes). Its
+          # answer early in a season has not been observed; if it gave no
+          # clubs there, the run would keep last season a little longer,
+          # which is the safe direction.
           END_YEAR="$END_YEAR_INPUT"
           if [ -z "$END_YEAR" ]; then
             YEAR="$(date -u +%Y)"
             TODAY="$(date -u +%F)"
             COUNTS="$(curl --max-time 30 --retry 5 --retry-all-errors --retry-delay 10 -fsS \
-              "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=${YEAR}&date=${TODAY}" \
+              "https://statsapi.mlb.com/api/v1/standings?leagueId=103,104&season=${YEAR}" \
               | jq -r '[.records[].teamRecords[]] | "\(length) \(map(select(.wins + .losses > 0)) | length)"')"
             read -r CLUBS PLAYED <<< "$COUNTS"
             case "$CLUBS $PLAYED" in
