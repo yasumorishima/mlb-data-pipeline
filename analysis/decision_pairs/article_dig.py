@@ -80,7 +80,7 @@ dsame, dn = point(P, P.cells(dd2, {"fip": dd2.fip_n.to_numpy(float), "xera": dd2
 out["pitchers"]["same_season_dev"] = dsame
 out["pitchers"]["dev_pairs"] = dn
 
-# strong disagreements: same role, both 500+ BF in 2025, ERA lower by 1.00+ while K-BB% lower by 6+ points
+# strong disagreements: same role, both 500+ BF in 2025, ERA lower by more than 1.00 while K-BB% lower by more than 6 points
 pn = names("mart_pitcher_season")
 big = []
 for _, g in d.groupby("role"):
