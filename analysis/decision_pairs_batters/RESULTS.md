@@ -1,5 +1,7 @@
 # Results: two hitters, pick one (2025 -> 2026)
 
+Write-up: [JP](https://qiita.com/ussu_ussu_ussu/items/280a6e3ff8357c27c8ec) / [EN](https://dev.to/yasumorishima/two-players-pick-one-on-last-seasons-numbers-how-often-is-it-right-mlb-2026-checked-against-2bla)
+
 Pre-registration: `PREREG.md`, frozen by the merge of #49 (master
 `8d6507f`) before this run. Run 2026-10-01 on HF `yasumorishima/mlb-stats`
 revision `e006cbe12da75aac0cb96892ac8b43b9a27e5261`, `pairs.py` md5
