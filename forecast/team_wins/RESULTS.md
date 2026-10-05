@@ -1,5 +1,7 @@
 # 2026 MLB team wins: result of the pre-registered test
 
+Write-up: [JP](https://zenn.dev/shogaku/articles/mlb-team-wins-forecast-2026) / [EN](https://dev.to/yasumorishima/how-well-do-player-projections-predict-team-wins-i-froze-mlb-2026-first-then-checked-3ih1)
+
 Predictions frozen in `pred_2026.csv` (master `9e6edbb`, merged
 2026-09-30 00:40 UTC) before the 2026 standings were fetched. At scoring
 time the md5 of all seven frozen files and of the two input tables
