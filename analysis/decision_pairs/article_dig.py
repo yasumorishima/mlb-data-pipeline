@@ -88,7 +88,8 @@ for _, g in d.groupby("role"):
     for _, a in g.iterrows():
         for _, b in g.iterrows():
             if a.era < b.era - 1.0 and a.k_minus_bb_rate < b.k_minus_bb_rate - 0.06:
-                big.append(b.era_next < a.era_next)
+                if b.era_next != a.era_next:  # an equal next-season ERA is dropped, as in pairs.py
+                    big.append(b.era_next < a.era_next)
 out["pitchers"]["strong_disagree"] = {"pairs": len(big), "kbb_right": float(np.mean(big))}
 pcols = ["era", "k_minus_bb_rate", "fip", "xera", "bf", "era_next"]
 ids = {pn[i]: i for i in d.player_id}  # names among the pitchers in the decision set
@@ -100,8 +101,9 @@ out["pitchers"]["examples"] = {
 
 # ---------------- hitters
 bdf = B.load()
-db = B.build_rows(bdf, [B.PRIMARY_SEASON] if hasattr(B, "PRIMARY_SEASON") else [2025])
+db = B.build_rows(bdf, [B.PRIMARY_SEASON])
 bsc = {k: f(db).to_numpy(float) for k, f in B.RULES.items()}
+bsc["blend"] = -(B.design(db) @ np.array(B.FROZEN_BETA))
 brep, bn_ = point(B, B.cells(db, bsc))
 bprim = json.loads((HERE.parent / "decision_pairs_batters" / "primary.json").read_text())["all"]
 for k, v in brep.items():
@@ -124,12 +126,13 @@ g = db[db.pa >= 500]
 for _, a in g.iterrows():
     for _, b in g.iterrows():
         if a.woba > b.woba + 0.025 and a.xwoba < b.xwoba - 0.025:
-            big.append(b.woba_next > a.woba_next)
+            if b.woba_next != a.woba_next:
+                big.append(b.woba_next > a.woba_next)
 out["hitters"]["strong_disagree"] = {"pairs": len(big), "xwoba_right": float(np.mean(big))}
 bids = {bnames[i]: i for i in db.player_id}  # names among the hitters in the decision set
 dup = db.player_id.map(bnames).value_counts()
 dup = set(dup[dup > 1].index)  # two hitters share a name (e.g. Max Muncy); none of the examples may be one
-bcols = ["woba", "xwoba", "pa", "woba_next"]
+bcols = ["woba", "xwoba", "pa", "woba_next", "pa_next"]
 out["hitters"]["examples"] = {
     f"{a} / {b}": pair_row(db, bids[a], bids[b], bcols)
     for a, b in [("Harrison Bader", "Salvador Perez"), ("Jacob Wilson", "Salvador Perez")]
