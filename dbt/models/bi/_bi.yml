@@ -230,3 +230,55 @@ models:
       - name: rv100_pctile_in_type
         data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
         data_tests: [{in_range: {arguments: {min_value: 0, max_value: 100}}}]
+  - name: bi_metric_carryover
+    description: >
+      Dashboard table for which numbers carry over to next season: the four
+      reliability marts (batting, pitching, pitch types, fielding and
+      running) in one long table, one row per area, metric and group (a
+      sample-size bin, or a position for fielding). yoy_corr is the
+      within-type correlation for pitch types. next_corr is against next
+      season's wOBA or ERA; next_corr_strength is its absolute value.
+    config:
+      contract: {enforced: true}
+    data_tests:
+      - {unique_combination: {arguments: {columns: [area, metric, group_label]}}}
+      - {unique_combination: {arguments: {columns: [area, metric, group_order]}}}
+    columns:
+      - name: area
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: metric
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: metric_label
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: sample_unit
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: group_label
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+        constraints: [{type: not_null}]
+      - name: group_order
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: group_lo
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: group_hi
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+      - name: n_pairs
+        data_type: "{{ 'int64' if target.type == 'bigquery' else 'bigint' }}"
+        constraints: [{type: not_null}]
+      - name: yoy_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+        data_tests: [{in_range: {arguments: {min_value: -1, max_value: 1}}}]
+      - name: yoy_corr_raw
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: next_target
+        data_type: "{{ 'string' if target.type == 'bigquery' else 'varchar' }}"
+      - name: next_corr
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: next_corr_strength
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
+      - name: mean_change
+        data_type: "{{ 'float64' if target.type == 'bigquery' else 'double' }}"
