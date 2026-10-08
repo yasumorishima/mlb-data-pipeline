@@ -1,3 +1,5 @@
+> **Retired (2026-10-08).** This RPi5 systemd backfill no longer runs and `/mnt/ssd` no longer exists on that host. The tables are refreshed weekly by `.github/workflows/weekly_refresh.yml` and published to [Hugging Face `yasumorishima/mlb-stats`](https://huggingface.co/datasets/yasumorishima/mlb-stats). Kept for reference only.
+
 # MLB Backfill — RPi5 systemd deployment
 
 Runs `scripts/run_backfill.py` every 3 hours to fetch one work unit at a time
