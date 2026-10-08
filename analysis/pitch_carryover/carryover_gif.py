@@ -38,6 +38,8 @@ def pairs(raw, partial, m):
                       "n": raw["pitches"]})
     d[m] = raw["whiff_percent"] / 100.0 if m == "whiff_rate" else raw["run_value_per_100"]
     d = d[d["n"] >= 100].dropna(subset=[m])
+    if m == "whiff_rate" and not (d[m].between(0, 1).all() and d[m].median() > 0.05):
+        raise SystemExit("whiff rate is not a share between 0 and 1")
     if d.duplicated(["pid", "season", "pt"]).any():
         raise SystemExit("duplicate (pitcher, season, pitch type) rows")
     d["w"] = d[m] - d.groupby(["season", "pt"])[m].transform("mean")
@@ -67,8 +69,8 @@ def main(arsenal, statsapi, mart, out_gif):
     seasons = sorted(set(data[METRICS[0][0]]["season"]))
     if any(sorted(set(data[m]["season"])) != seasons for m, *_ in METRICS):
         raise SystemExit("metrics cover different season pairs")
-    lim = {m: float(np.quantile(np.abs(np.r_[data[m]["w1"], data[m]["w2"]]), 0.995)) * s * 1.05
-           for m, _, _, s in METRICS}
+    lim = {m: float(np.abs(np.r_[data[m]["w1"], data[m]["w2"]]).max()) * s * 1.05
+           for m, _, _, s in METRICS}   # every point inside the axes
     r_all = {m: float(np.corrcoef(data[m]["w1"], data[m]["w2"])[0, 1]) for m, *_ in METRICS}
 
     ease = [0.0, 0.15, 0.4, 0.7, 0.9, 1.0]
@@ -101,6 +103,8 @@ def main(arsenal, statsapi, mart, out_gif):
                 r = np.corrcoef(seen["w1"], seen["w2"])[0, 1]
                 ax.text(0.04, 0.95, f"r = {r:.2f}", transform=ax.transAxes, fontsize=20, weight="bold",
                         va="top", color="#333333")
+                ax.text(0.04, 0.84, "pairs so far", transform=ax.transAxes, fontsize=10, va="top",
+                        color="#555555")
             ax.set_xlim(-L, L)
             ax.set_ylim(-L, L)
             ax.set_aspect("equal")
@@ -115,12 +119,14 @@ def main(arsenal, statsapi, mart, out_gif):
                 f"(r {r_all['run_value_per_100']:.2f})" if last
                 else "Does a pitch's season carry over to the next?")
         fig.suptitle(head, fontsize=16, x=0.02, ha="left", y=0.975)
-        fig.text(0.98, 0.9, f"{s} → {s + 1}", fontsize=24, ha="right", va="top", weight="bold",
+        fig.text(0.98, 0.93, f"{s} → {s + 1}", fontsize=22, ha="right", va="top", weight="bold",
                  color="#444444")
-        fig.text(0.02, 0.012, f"Same pitcher and pitch type, {MIN_PITCHES}+ pitches in both seasons, pitch-type "
-                 "average removed.\nDashed line: next season = this season. Data: Statcast via Baseball Savant.",
-                 fontsize=10, color="#555555")
-        fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.18, wspace=0.3)  # fixed: no jitter
+        fig.text(0.02, 0.01, "\n".join([
+            f"Same pitcher and pitch type, {MIN_PITCHES}+ pitches in both seasons. Run value: + is good for the pitcher.",
+            "Pitch-type average removed (over every pitch with 100+ in the season, so these sit above zero).",
+            "Dashed line: next season = this season. Data: Statcast via Baseball Savant."]),
+                 fontsize=9.5, color="#555555")
+        fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.23, wspace=0.3)  # fixed: no jitter
         buf = io.BytesIO()
         fig.savefig(buf, format="png", facecolor="white")
         plt.close(fig)

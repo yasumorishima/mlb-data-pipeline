@@ -105,6 +105,9 @@ What had to change so one set of SQL runs on both engines:
 Each pitch starts on the dashed line, where it would sit if next season
 repeated this one, and slides to where next season put it. Whiff rate stays
 close to the line (r = 0.71); run value per 100 pitches scatters (r = 0.27).
+The r in each panel counts the pairs shown so far. The linked article used
+2017-2025 (1,962 pairs, whiff r = 0.70); the 2026 season adds 278 pairs.
+Run value is from the pitcher's side: positive is good for him.
 Built by [`analysis/pitch_carryover/carryover_gif.py`](../analysis/pitch_carryover/carryover_gif.py),
 which first recomputes the 400-800 and 800+ bins and refuses to draw unless
 they equal the mart.
