@@ -44,9 +44,9 @@ Rows は 2026-09-23 の run `35864013558` の実測（全季節の合計）。
 
 | Table | Source | Rows | Description |
 |-------|--------|------|-------------|
-| `fg_batting` | FanGraphs | ~6K/yr | Season batting stats (all columns, qual=50) |
-| `fg_pitching` | FanGraphs | ~4K/yr | Season pitching stats (all columns, qual=30) |
-| `fg_pitcher_plus` | FanGraphs | ~2.5K/yr | Stuff+/Location+/Pitching+ per pitch type (2020+) |
+| `fg_batting` | FanGraphs | 5,703 (2015-2025 total) | Season batting stats (all columns, qual=50) |
+| `fg_pitching` | FanGraphs | 4,648 (2015-2025 total) | Season pitching stats (all columns, qual=30) |
+| `fg_pitcher_plus` | FanGraphs | 2,383 (2020-2025 total) | Stuff+/Location+/Pitching+ per pitch type (2020+) |
 | `sc_batter_exitvelo` | Savant | 5,668 | Exit velocity, barrel rate |
 | `sc_batter_expected` | Savant | 9,835 | xBA, xSLG, xwOBA |
 | `sc_pitcher_exitvelo` | Savant | 6,630 | Exit velocity against |
@@ -61,7 +61,7 @@ Rows は 2026-09-23 の run `35864013558` の実測（全季節の合計）。
 | `park_factors` | Savant | 360 | Ballpark factors, 1yr + 3yr windows (2015-2026, 12 × 30) |
 | `statsapi_batting` | MLB Stats API | 12,100 | Season batting + sabermetrics (wOBA, wRAA, wRC, wRC+, WAR), all players, 2015+ |
 | `statsapi_pitching` | MLB Stats API | 9,832 | Season pitching + sabermetrics (FIP, xFIP, FIP-, ERA-, WAR), all players, 2015+ |
-| `statcast_pitches` | Savant | 6.8M+ | Full pitch-level data (2015-2025, 122 cols) |
+| `statcast_pitches` | Savant | 6.8M+ | Full pitch-level data (2015-2025, 122 cols). **Not on Hugging Face**: manual run of `scripts/fetch_statcast_pitches.py` only, not part of the weekly refresh |
 
 Parquet mode writes statcast per-year (`statcast_pitches_2015.parquet` … `statcast_pitches_2025.parquet`); all other tables are single files. HF 上ではテーブル名のファイルがルート直下に置かれる（例: `fg_batting.parquet`）。
 
