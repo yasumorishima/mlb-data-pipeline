@@ -96,6 +96,22 @@ What had to change so one set of SQL runs on both engines:
 | `accepted_values: [100, 200, ...]` | same, with `quote: false` | BigQuery will not compare INT64 with a string |
 | contract `data_type: double` | `float64` on BigQuery, `double` on DuckDB | the contract types are adapter-specific |
 
+## Pitch metrics, one season to the next
+
+![Whiff rate carries over to next season; run value mostly does not](../docs/images/pitch_carryover_yoy_en.gif)
+
+`mart_scouting_reliability` with 400+ pitches in both seasons, 2017 to 2026
+(2,240 pairs of the same pitcher and pitch type, pitch-type average removed).
+Each pitch starts on the dashed line, where it would sit if next season
+repeated this one, and slides to where next season put it. Whiff rate stays
+close to the line (r = 0.71); run value per 100 pitches scatters (r = 0.27).
+The r in each panel counts the pairs shown so far. The linked article used
+2017-2025 (1,962 pairs, whiff r = 0.70); the 2026 season adds 278 pairs.
+Run value is from the pitcher's side: positive is good for him.
+Built by [`analysis/pitch_carryover/carryover_gif.py`](../analysis/pitch_carryover/carryover_gif.py),
+which first recomputes the 400-800 and 800+ bins and refuses to draw unless
+they equal the mart.
+
 ## Result vs process for batters
 
 `mart_batter_process_reliability` (build of 2026-09-27): pairs of consecutive
