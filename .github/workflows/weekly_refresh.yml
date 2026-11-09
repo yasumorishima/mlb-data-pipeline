@@ -75,7 +75,15 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        # Retry: a dependency may download files at install time (dbt's
+        # experimental parser fetches its wheel from github.com releases;
+        # HTTP 504 on 2026-11-09, run 42581472508). 3 tries, 1 / 3 min apart.
+        run: |
+          for i in 1 2 3; do
+            pip install -r requirements.txt && exit 0
+            [ "$i" -lt 3 ] && { echo "pip install failed (try $i), retrying"; sleep $((i * 60)); }
+          done
+          exit 1
 
       - name: Determine steps
         id: steps

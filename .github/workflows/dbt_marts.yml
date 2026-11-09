@@ -54,7 +54,15 @@ jobs:
           cache-dependency-path: dbt/requirements.txt
 
       - name: Install dbt
-        run: pip install -r requirements.txt
+        # Retry: a dependency may download files at install time (dbt's
+        # experimental parser fetches its wheel from github.com releases;
+        # HTTP 504 on 2026-11-09, run 42581472508). 3 tries, 1 / 3 min apart.
+        run: |
+          for i in 1 2 3; do
+            pip install -r requirements.txt && exit 0
+            [ "$i" -lt 3 ] && { echo "pip install failed (try $i), retrying"; sleep $((i * 60)); }
+          done
+          exit 1
 
       # Pin the input to the dataset commit that is current now, so the
       # build reads one consistent snapshot and the manifest can name it.
@@ -144,7 +152,15 @@ jobs:
           cache-dependency-path: dbt/requirements-bigquery.txt
 
       - name: Install dbt-bigquery
-        run: pip install -r requirements-bigquery.txt
+        # Retry: a dependency may download files at install time (dbt's
+        # experimental parser fetches its wheel from github.com releases;
+        # HTTP 504 on 2026-11-09, run 42581472508). 3 tries, 1 / 3 min apart.
+        run: |
+          for i in 1 2 3; do
+            pip install -r requirements-bigquery.txt && exit 0
+            [ "$i" -lt 3 ] && { echo "pip install failed (try $i), retrying"; sleep $((i * 60)); }
+          done
+          exit 1
 
       - uses: google-github-actions/auth@v3
         with:
