@@ -1,4 +1,5 @@
 dbt-core==1.12.5
+dbt-core-experimental-parser==2.0.8
 dbt-bigquery==1.12.1
 google-cloud-bigquery==3.45.2
 pyarrow==25.0.1
